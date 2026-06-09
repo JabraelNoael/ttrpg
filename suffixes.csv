@@ -1,0 +1,139 @@
+Suffix,Type,Effect,Category
+of the Cold,+,"On-Hit: 15% chance to apply Chill (−2 Initiative & −10% Speed for 2 turns)",Wieldable
+of the Cold,+,"Passive: +8% Cold Resistance & −5% Fire Resistance",Equipment
+of the Frost,+,"On-Hit: 25% chance to apply Freeze (target loses next action); Passive: +5% Cold Resistance",Wieldable
+of the Frost,+,"Passive: +12% Cold Resistance & −8% Fire Resistance; On-Block: 20% chance to Chill attacker",Equipment
+of the Flame,+,"On-Hit: 20% chance to apply Burn (+[1d6] fire damage per turn for 3 turns)",Wieldable
+of the Flame,+,"Passive: +8% Fire Resistance & −5% Cold Resistance",Equipment
+of the Inferno,+,"On-Hit: 30% chance to apply Sear (+[2d6] fire damage per turn for 3 turns); On-Kill: target explodes dealing [1d8] AoE fire damage",Wieldable
+of the Inferno,+,"Passive: +14% Fire Resistance; On-Block: attacker takes [1d4] fire damage",Equipment
+of the Ember,°,"On-Hit: 10% chance to apply Burn (+[1d4] fire damage for 2 turns); Passive: −3% Cold Resistance",Wieldable
+of the Shadows,+,"Passive: +10% to Stealth; On-Crit: target is Blinded for 1 turn",Wieldable
+of the Shadows,+,"Passive: +8% Stealth & +5% Tenacity; wearer makes 20% less noise when moving",Equipment
+of the Void,+,"On-Hit: 15% chance to apply Silence (target cannot cast spells for 2 turns); Passive: +6% Magic",Wieldable
+of the Void,+,"Passive: +10% Ward & +6% Willpower; On-Block: 15% chance to Silence attacker for 1 turn",Equipment
+of the Abyss,°,"Passive: +12% Magic & −8% Max Health; On-Kill: restore [1d8] Mana",Wieldable
+of the Abyss,°,"Passive: +14% Ward & −10% Max Health; On-Block: absorb [1d6] Mana from attacker",Equipment
+of Rot,−,"On-Hit: 30% chance to apply Rot (−5% all stats per turn for 3 turns; stacks); Passive: −5% Vitality",Wieldable
+of Rot,−,"On-Take-Hit: 20% chance to spread Rot to attacker; Passive: −5% Health Regen",Equipment
+of Wither,−,"On-Hit: 25% chance to apply Wither (−10% Damage & −10% Defense for 3 turns)",Wieldable
+of Wither,−,"Passive: Nearby enemies suffer −5% Attack; On-Block: 20% chance to Wither attacker",Equipment
+of the Plague,−,"On-Hit: 20% chance to apply Plague (spreads Rot to all adjacent enemies); Passive: −8% Vitality",Wieldable
+of the Plague,−,"Passive: −8% Health Regen; On-Take-Hit: 15% chance to infect attacker with Plague",Equipment
+of Thunder,+,"On-Hit: 20% chance to Stun target for 1 turn; Passive: +6% Attack",Wieldable
+of Thunder,+,"Passive: +8% Initiative; On-Block: 25% chance to Stun attacker for 1 turn",Equipment
+of the Storm,+,"On-Crit: chain lightning strikes up to 2 additional targets for [1d8] damage; Passive: +4% Attack",Wieldable
+of the Storm,+,"Passive: +10% Initiative & +5% Speed; On-Block: 20% chance to chain lightning to attacker",Equipment
+of the Gale,+,"Passive: +10% Speed & +1 Initiative; On-Hit: 15% chance to knock target back 5ft",Wieldable
+of the Gale,+,"Passive: +12% Speed & +8% Initiative; When Moving: leave a brief wind trail reducing attacker accuracy by 10%",Equipment
+of the Lightning,+,"On-Hit: 25% chance to Shock target (−1 Initiative & −5% Attack for 2 turns)",Wieldable
+of the Lightning,+,"Passive: +5% Initiative; On-Block: 30% chance to Shock attacker",Equipment
+of the Arc,+,"On-Crit: release an Arc striking all enemies within 10ft for [1d6] lightning damage",Wieldable
+of the Earth,+,"Passive: +8% Physical Resistance & +5% Bludgeon Resistance",Equipment
+of the Earth,+,"On-Hit: 15% chance to Root target for 1 turn (cannot move); Passive: +4% Bludgeon Damage",Wieldable
+of the Stone,+,"Passive: +12% Physical Resistance & +8% Defense; −1 Initiative",Equipment
+of the Stone,+,"On-Hit: 20% chance to apply Stone Skin to self (+10% Physical Resistance for 2 turns)",Wieldable
+of the Granite,+,"Passive: +15% Bludgeon Resistance & +10% Defense; −2 Initiative & −5% Speed",Equipment
+of the Tides,+,"On-Hit: 20% chance to knock target back 10ft; Passive: +5% Speed",Wieldable
+of the Tides,+,"Passive: +8% Speed; On-Block: 25% chance to push attacker back 5ft",Equipment
+of the Deep,+,"Passive: +10% Vitality & +8% Ward; breathing underwater",Equipment
+of the Deep,+,"On-Hit: 15% chance to apply Drowning (target chokes; −10% all stats for 2 turns)",Wieldable
+of the Venom,°,"On-Hit: 35% chance to Poison target (+[1d4] poison damage per turn for 4 turns); Passive: −5% Vitality",Wieldable
+of the Venom,°,"On-Take-Hit: 20% chance to Poison attacker; Passive: +5% Poison Resistance & −5% Vitality",Equipment
+of the Serpent,°,"On-Crit: apply Venom (stacking Poison; +[1d4] per stack per turn); On-Kill: restore [1d6] Health",Wieldable
+of the Serpent,°,"Passive: +8% Tenacity & −5% Vitality; On-Block: 25% chance to Poison attacker",Equipment
+of the Repel,+,"Passive: +10% Physical Resistance; On-Block: 20% chance to Knockback attacker 10ft",Equipment
+of the Repel,+,"On-Hit: 20% chance to push target back 5ft and reduce their Initiative by 1",Wieldable
+of the Ward,+,"Passive: +12% Ward & +8% Willpower",Equipment
+of the Ward,+,"On-Hit: 15% chance to apply a Ward to self absorbing next [1d8] damage",Wieldable
+of the Aegis,+,"Passive: +15% Ward & +10% Armor Class; On-Block: restore [1d4] Health",Equipment
+of the Barrier,+,"Passive: +10% Ward; When Moving: generate a 5% Ward stack (max 5 stacks)",Equipment
+of the Elastic,+,"Passive: +15% Bludgeon Resistance; On-Block: 30% of blocked Bludgeon damage is returned to attacker",Equipment
+of the Elastic,°,"Passive: +8% Bludgeon Resistance & −5% Slash Resistance; On-Hit: Bludgeon attacks bounce for 50% damage to adjacent target",Wieldable
+of the Rebound,+,"On-Block: 25% of all physical damage is reflected back to attacker",Equipment
+of the Thorns,°,"Passive: +5% Physical Resistance; On-Take-Hit: attacker takes [1d4] + 5% of their own Attack as damage",Equipment
+of the Thorns,°,"On-Hit: target takes [1d4] bonus piercing damage; Passive: −4% Bludgeon Damage",Wieldable
+of the Leech,°,"On-Hit: restore Health equal to 10% of damage dealt; Passive: −5% Max Mana",Wieldable
+of the Leech,°,"On-Take-Hit: drain [1d4] Health from attacker; Passive: −8% Mana Regen",Equipment
+of the Vampire,°,"On-Crit: restore Health equal to 25% of damage dealt; On-Kill: restore [1d8] Health & [1d4] Mana; Passive: −10% Max Health",Wieldable
+of the Siphon,°,"On-Hit: 20% chance to drain [1d4] Mana from target; Passive: −5% Health Regen",Wieldable
+of the Siphon,°,"On-Take-Hit: 15% chance to drain [1d4] Mana from attacker; Passive: −5% Health Regen",Equipment
+of the Mending,+,"Passive: +8% Health Regen; On-Block: restore [1d4] Health",Equipment
+of the Mending,+,"On-Kill: restore [1d6] Health; Passive: +5% Health Regen",Wieldable
+of the Restoration,+,"Passive: +12% Health Regen & +8% Mana Regen",Equipment
+of the Swiftness,+,"Passive: +12% Speed & +2 Initiative",Equipment
+of the Swiftness,+,"On-Hit: next attack this turn costs no Initiative; Passive: +8% Speed",Wieldable
+of the Haste,+,"Passive: +15% Speed & +3 Initiative; When Moving: +5% Attack until end of turn",Equipment
+of the Sloth,−,"Passive: −12% Speed & −2 Initiative; On-Take-Hit: chance of additional −1 Initiative for 1 turn",Equipment
+of the Sloth,−,"Passive: −10% Speed & −2 Initiative; On-Hit: 20% chance to Slow target (−10% Speed & −1 Initiative for 2 turns)",Wieldable
+of the Titan,+,"Passive: +10% Bludgeon Damage & +8% Vitality & −1 Initiative",Wieldable
+of the Titan,+,"Passive: +12% Defense & +10% Vitality & −1 Initiative",Equipment
+of the Giant,+,"Passive: +15% Bludgeon Damage & +0.5 Reach & −2 Initiative",Wieldable
+of the Wraith,+,"Passive: +10% Stealth & +8% Speed; On-Crit: briefly become Incorporeal (immune to next physical hit)",Wieldable
+of the Wraith,+,"Passive: +10% Stealth & +8% Ward; On-Block: 15% chance to become briefly Incorporeal",Equipment
+of the Spectre,+,"Passive: +12% Tenacity & +10% Willpower; On-Kill: leave a spectral echo that blocks 1 hit",Wieldable
+of the Soul,°,"On-Kill: gain a Soul Stack (+3% all stats per stack; max 5 stacks; lost on death); Passive: −5% Max Health",Wieldable
+of the Soul,°,"Passive: +8% Willpower; On-Block: 20% chance to gain a Soul Stack (+3% Defense per stack; max 5)",Equipment
+of the Lich,−,"Passive: +15% Magic & +12% Mana Regen & −15% Max Health & −10% Health Regen",Equipment
+of the Lich,−,"On-Crit: apply Soul Drain (target loses [1d6] Mana per turn for 3 turns); Passive: −10% Max Health",Wieldable
+of the Martyr,−,"On-Take-Hit: +5% Damage per hit received this combat (max 10 stacks); Passive: −10% Physical Resistance",Equipment
+of the Martyr,−,"On-Hit: +3% Damage per hit received this combat (max 10 stacks); Passive: −10% Defense",Wieldable
+of the Berserker,°,"Passive: +12% Damage; for every 10% Max Health lost gain an additional +5% Damage & −3% Defense",Wieldable
+of the Berserker,°,"Passive: +8% Vitality; for every 10% Max Health lost gain +5% Attack & −3% Physical Resistance",Equipment
+of the Coward,−,"Passive: +15% Speed; when below 25% Health gain +20% Speed & −20% Damage",Wieldable
+of the Coward,−,"Passive: +12% Speed; when below 25% Health gain +20% Speed & −20% Physical Resistance",Equipment
+of the Dusk,°,"Passive: +8% Stealth & +6% Magic; effects are doubled in darkness or dim light",Wieldable
+of the Dusk,°,"Passive: +6% Stealth & +8% Ward; effects are doubled in darkness or dim light",Equipment
+of the Dawn,+,"Passive: +8% Attack & +6% Vitality; effects are doubled in bright light or sunlight",Wieldable
+of the Dawn,+,"Passive: +10% Defense & +6% Health Regen; effects are doubled in bright light or sunlight",Equipment
+of the Moon,+,"Passive: +10% Magic & +8% Mana Regen; effects are doubled at night",Equipment
+of the Moon,+,"On-Crit: apply Lunar Mark (target takes +15% damage from all sources for 2 turns); Passive: +5% Magic",Wieldable
+of the Sun,+,"Passive: +10% Attack & +8% Health Regen; effects are doubled during daytime",Equipment
+of the Sun,+,"On-Hit: 20% chance to Blind target for 1 turn; Passive: +8% Attack",Wieldable
+of the Stars,+,"Passive: +8% Luck & +6% Critical Scale; On-Crit: trigger a second free attack at 40% damage",Wieldable
+of the Stars,+,"Passive: +10% Luck & +8% Ward; once per combat: negate a killing blow",Equipment
+of the Cosmos,+,"Passive: +8% all Magic stats & +6% Luck; On-Kill: reset Initiative to maximum",Wieldable
+of the Cosmos,+,"Passive: +10% all Magic stats & +8% Ward; On-Block: 15% chance to reflect all damage",Equipment
+of the Fate,°,"Passive: +15% Luck & −5% all stats; once per long rest: reroll any single dice result",Wieldable & Equipment
+of the Fortune,+,"Passive: +10% Luck & +5% Yield; On-Kill: 20% chance to gain bonus loot",Wieldable & Equipment
+of the Cursed,−,"Passive: +20% Damage & −15% all defensive stats; cannot be unequipped without Remove Curse",Wieldable
+of the Cursed,−,"Passive: +20% Defense & −15% all offensive stats; cannot be unequipped without Remove Curse",Equipment
+of the Damned,−,"Passive: +25% all stats & −20% Max Health; On-Kill: lose [1d4] Max Health permanently",Wieldable
+of the Damned,−,"Passive: +20% all stats & −25% Max Health; On-Take-Hit: lose [1d4] Max Health permanently",Equipment
+of the Sacrifice,−,"On-Kill: gain +8% all stats for 3 turns; Passive: each kill costs [1d4] Health",Wieldable
+of the Hunger,−,"On-Hit: +5% Damage per turn without a kill (max 10 stacks; resets on kill); Passive: −5% Health Regen",Wieldable
+of the Hunger,−,"Passive: +8% Defense that degrades −1% every turn without taking damage (max −8%); −5% Health Regen",Equipment
+of the Ancients,+,"Passive: +8% all stats; On-Crit: summon a spectral echo of the weapon for 1 attack at 50% damage",Wieldable
+of the Ancients,+,"Passive: +10% all stats; Once per combat: activate Ancestral Guard absorbing up to [3d8] damage",Equipment
+of the Forgotten,°,"Passive: +12% Magic & +10% Willpower & −8% Attack; On-Kill: 15% chance to raise slain enemy as a temporary ally",Wieldable
+of the Forgotten,°,"Passive: +10% Ward & +8% Willpower & −6% Defense; On-Block: 20% chance to Terrify attacker",Equipment
+of the Rune,+,"Passive: +8% Magic & +6% Arcana; On-Hit: 15% chance to trigger a random minor rune effect",Wieldable
+of the Rune,+,"Passive: +8% Arcana Ward & +6% Arcana; On-Block: 20% chance to trigger a minor rune effect",Equipment
+of the Sigil,+,"Passive: +10% Arcana & +8% Magic; On-Crit: trigger a Major Sigil effect (DM determines)",Wieldable
+of the Sigil,+,"Passive: +10% Arcana Ward & +8% Arcana; On-Take-Hit: 15% chance to trigger a Major Sigil effect",Equipment
+of the Wild,+,"Passive: +8% Speed & +6% Vitality; effects are doubled in natural environments (forests, plains, etc.)",Wieldable & Equipment
+of the Hunt,+,"Passive: +8% Attack & +6% Speed; On-Kill: +5% Attack & Speed for 3 turns (stacks up to 3 times)",Wieldable
+of the Hunt,+,"Passive: +8% Initiative & +6% Speed; When Moving: +4% Attack until end of turn",Equipment
+of the Pack,+,"Passive: +4% all stats per adjacent ally (max 4 stacks); Party Size +1",Wieldable & Equipment
+of the Lone Wolf,°,"Passive: +15% all stats when no allies are within 30ft; −8% all stats when allies are within 30ft",Wieldable & Equipment
+of the Plague Doctor,°,"Passive: immune to Poison & Rot & Disease; On-Hit: 20% chance to apply random disease; −5% Vitality",Wieldable
+of the Plague Doctor,°,"Passive: immune to Poison & Rot & Disease; On-Take-Hit: 15% chance to infect attacker; −5% Vitality",Equipment
+of the Grave,−,"Passive: +12% Pierce Damage & +8% Slash Damage; On-Kill: raise a skeleton ally for 3 turns; −10% Max Health",Wieldable
+of the Grave,−,"Passive: +10% Physical Resistance; On-Block: 20% chance to raise a skeleton minion for 3 turns; −10% Max Health",Equipment
+of the Phoenix,+,"Passive: +8% Fire Resistance; Once per long rest: on fatal damage survive with 15% Health and gain +20% all stats for 2 turns",Wieldable & Equipment
+of the Dragon,+,"Passive: +10% all damage stats & +8% Fire Resistance; On-Crit: release a cone of fire for [2d6] damage",Wieldable
+of the Dragon,+,"Passive: +12% Physical Resistance & +10% Fire Resistance; On-Block: 20% chance to breathe fire on attacker for [2d6]",Equipment
+of the Kraken,+,"Passive: +8% Vitality & +6% Tenacity; On-Hit: 20% chance to Entangle target (cannot move for 1 turn)",Wieldable
+of the Kraken,+,"Passive: +10% Physical Resistance & +8% Tenacity; On-Block: 25% chance to Entangle attacker",Equipment
+of the Chimera,°,"Passive: +6% Fire Resistance & +6% Cold Resistance & +6% Lightning Resistance & −5% Physical Resistance",Equipment
+of the Chimera,°,"On-Hit: randomly apply Burn OR Chill OR Shock; Passive: +5% Magic & −4% Physical Penetration",Wieldable
+of the Rift,+,"Passive: +10% Physical Penetration & +8% Magic; On-Crit: target is pulled 10ft toward wielder",Wieldable
+of the Rift,+,"Passive: +8% Ward & +6% Ethereal Ward; On-Block: 20% chance to briefly banish attacker to the Rift (skip next action)",Equipment
+of the Mirage,°,"Passive: +10% Stealth; On-Hit: 20% chance to create a decoy illusion drawing 1 attack; −5% Defense",Wieldable
+of the Mirage,°,"Passive: +8% Stealth & +6% Tenacity; On-Take-Hit: 15% chance to redirect hit to an illusion; −5% Defense",Equipment
+of the Echo,+,"On-Hit: 20% chance to Echo the attack at 40% damage; Passive: +4% Attack",Wieldable
+of the Echo,+,"On-Block: 20% chance to Echo the blocked damage back at 40%; Passive: +4% Defense",Equipment
+of the Silence,°,"On-Hit: 25% chance to Silence target for 2 turns; Passive: +8% Willpower & −5% Magic",Wieldable
+of the Silence,°,"Passive: +10% Willpower & −5% Magic; On-Block: 30% chance to Silence attacker for 1 turn",Equipment
+of the Tempest,+,"Passive: +8% Speed & +6% Initiative; On-Crit: release a shockwave pushing all enemies within 10ft back 5ft",Wieldable
+of the Tempest,+,"Passive: +8% Initiative & +6% Speed; On-Block: shockwave pushes attacker back 5ft and reduces their Initiative by 1",Equipment

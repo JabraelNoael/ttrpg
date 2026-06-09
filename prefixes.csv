@@ -1,0 +1,118 @@
+Prefix,Type,Effect,Category
+Polished,+,+4% Defense & Armor Class,Equipment
+Reinforced,+,*1.1 Physical Resistance,Equipment
+Fine,+,+2% all stats,Equipment
+Masterwork,+,+5% all stats,Equipment
+Tempered,+,+6% Physical Resistance,Equipment
+Hardened,+,+5% Bludgeon Resistance & Pierce Resistance & Slash Resistance,Equipment
+Fitted,+,+3% Defense & +3% Armor Class,Equipment
+Layered,+,+4% Physical Resistance & +2% Defense,Equipment
+Fortified,+,+8% Defense,Equipment
+Thick,+,+6% Bludgeon Resistance,Equipment
+Dense,+,+5% Bludgeon Resistance & +3% Defense,Equipment
+Burnished,+,+3% all stats & +2% Armor Class,Equipment
+Articulated,+,+2% all stats & +1 Initiative,Equipment
+Ward-Etched,+,+8% Ward,Equipment
+Runed,+,+6% Ward & +4% Defense,Equipment
+Sanctified,+,+7% Armor Class & +5% Ward,Equipment
+Legendary,+,+10% all stats,Equipment
+Tattered,−,−50% all stats,Equipment
+Crackable,−,−3% all stats & −10% Bludgeon Resistance,Equipment
+Crackable II,−,−5% all stats & −16% Bludgeon Resistance,Equipment
+Crackable III,−,−8% all stats & −22% Bludgeon Resistance,Equipment
+Scratchable,−,−3% all stats & −10% Slash Resistance,Equipment
+Scratchable II,−,−5% all stats & −16% Slash Resistance,Equipment
+Scratchable III,−,−8% all stats & −22% Slash Resistance,Equipment
+Pierceable,−,−3% all stats & −10% Pierce Resistance,Equipment
+Pierceable II,−,−5% all stats & −16% Pierce Resistance,Equipment
+Pierceable III,−,−8% all stats & −22% Pierce Resistance,Equipment
+Shattering,−,−5% Physical Pen; every hit taken adds an additional −5% Physical Pen,Equipment
+Brittle,−,−8% Physical Resistance,Equipment
+Brittle II,−,−14% Physical Resistance,Equipment
+Brittle III,−,−20% Physical Resistance,Equipment
+Rusted,−,−6% all stats,Equipment
+Rusted II,−,−10% all stats,Equipment
+Rusted III,−,−15% all stats,Equipment
+Warped,−,−4% Defense & −4% Armor Class,Equipment
+Warped II,−,−7% Defense & −7% Armor Class,Equipment
+Warped III,−,−11% Defense & −11% Armor Class,Equipment
+Worn,−,−4% all stats,Equipment
+Worn II,−,−7% all stats,Equipment
+Worn III,−,−11% all stats,Equipment
+Ill-Fitted,−,−5% Defense & −1 Initiative,Equipment
+Ill-Fitted II,−,−9% Defense & −2 Initiative,Equipment
+Ill-Fitted III,−,−14% Defense & −3 Initiative,Equipment
+Cumbersome,−,−2 Initiative & −5% Speed,Equipment
+Cumbersome II,−,−3 Initiative & −9% Speed,Equipment
+Cumbersome III,−,−4 Initiative & −14% Speed,Equipment
+Bludgeon-Acquired,°,−5% Pierce Resistance & Slash Resistance; +[7+d12]% Bludgeon Resistance,Equipment
+Pierce-Acquired,°,−5% Bludgeon Resistance & Slash Resistance; +[7+d12]% Pierce Resistance,Equipment
+Slash-Acquired,°,−5% Bludgeon Resistance & Pierce Resistance; +[7+d12]% Slash Resistance,Equipment
+Battle-Worn,°,−4% all stats & +5% Bludgeon Resistance & Pierce Resistance & Slash Resistance,Equipment
+Crude,°,+4% Defense & −3% Armor Class & −1 Initiative,Equipment
+Repaired,°,−3% Defense & +3% Bludgeon Resistance,Equipment
+Scavenged,°,−5% all stats & +3% Physical Resistance,Equipment
+Oversized,°,+5% Defense & −1 Initiative & −5% Speed,Equipment
+Undersized,°,−4% Defense & +1 Initiative & +4% Speed,Equipment
+Trophy-Etched,°,+4% Ward & −3% Defense,Equipment
+Patchwork,°,−4% Defense & +2% Bludgeon Resistance & +2% Slash Resistance,Equipment
+Long,+,+0.5 Reach,Wieldable
+Balanced,+,+6% Damage & +1 Initiative,Wieldable
+Penetrating,+,+8% Physical Penetration,Wieldable
+Strong,+,+9% Damage,Wieldable
+Legendary,+,+10% all stats,Wieldable
+Keen,+,+6% Slash Damage & +4% Critical Scale,Wieldable
+Honed,+,+5% Pierce Damage & +3% Critical Scale,Wieldable
+True,+,+4% all stats & +0.5 Reach,Wieldable
+Masterwork,+,+5% all stats,Wieldable
+Swift,+,+2 Initiative & +3% Attack,Wieldable
+Deadly,+,+7% Damage & +3% Critical Scale,Wieldable
+Vicious,+,+8% Damage & +5% Critical Scale,Wieldable
+Fine,+,+2% all stats,Wieldable
+Accurate,+,+6% Attack,Wieldable
+Brutal,+,+10% Bludgeon Damage & −1 Initiative,Wieldable
+Serrated,+,+8% Slash Damage & +4% Pierce Damage,Wieldable
+Barbed,+,+7% Pierce Damage & causes Bleed on critical,Wieldable
+Reinforced,+,+5% Bludgeon Damage & *1.05 Physical Penetration,Wieldable
+Runic,+,+6% Magic & +4% Physical Penetration,Wieldable
+Tempered,+,+5% Slash Damage & +5% Pierce Damage,Wieldable
+Weak,−,−9% Damage,Wieldable
+Dull,−,−8% Slash Damage & −6% Pierce Damage,Wieldable
+Dull II,−,−14% Slash Damage & −10% Pierce Damage,Wieldable
+Dull III,−,−20% Slash Damage & −15% Pierce Damage,Wieldable
+Chipped,−,−6% all stats,Wieldable
+Chipped II,−,−10% all stats,Wieldable
+Chipped III,−,−15% all stats,Wieldable
+Brittle,−,−5% Physical Penetration; every hit has a chance to reduce Damage by −3%,Wieldable
+Brittle II,−,−9% Physical Penetration; every hit has a chance to reduce Damage by −5%,Wieldable
+Brittle III,−,−14% Physical Penetration; every hit has a chance to reduce Damage by −8%,Wieldable
+Rusted,−,−6% all stats,Wieldable
+Rusted II,−,−10% all stats,Wieldable
+Rusted III,−,−15% all stats,Wieldable
+Clumsy,−,−2 Initiative & −4% Attack,Wieldable
+Clumsy II,−,−3 Initiative & −7% Attack,Wieldable
+Clumsy III,−,−4 Initiative & −11% Attack,Wieldable
+Unbalanced,−,−1 Initiative & −5% Damage,Wieldable
+Unbalanced II,−,−2 Initiative & −9% Damage,Wieldable
+Unbalanced III,−,−3 Initiative & −13% Damage,Wieldable
+Worn,−,−4% all stats,Wieldable
+Worn II,−,−7% all stats,Wieldable
+Worn III,−,−11% all stats,Wieldable
+Short,−,−0.5 Reach & −4% Damage,Wieldable
+Short II,−,−1.0 Reach & −7% Damage,Wieldable
+Short III,−,−1.5 Reach & −10% Damage,Wieldable
+Sharp,°,+7% Slash Damage & −3% Bludgeon Damage & −3% Pierce Damage,Wieldable
+Piercing,°,+7% Pierce Damage & −3% Bludgeon Damage & −3% Slash Damage,Wieldable
+Blunt,°,+7% Bludgeon Damage & −3% Pierce Damage & −3% Slash Damage,Wieldable
+Heavy,°,+8% Damage & −1 Initiative,Wieldable
+Light,°,−6% Damage & +1.5 Initiative,Wieldable
+Recurved,°,+5% Pierce Damage & −3% Bludgeon Damage & +0.5 Reach,Wieldable
+Weighted,°,+6% Bludgeon Damage & −1 Initiative & +3% Critical Scale,Wieldable
+Notched,°,−4% Slash Damage & +6% Pierce Damage,Wieldable
+Hollow,°,−5% Damage & +1.5 Initiative & +0.5 Reach,Wieldable
+Serrated,°,+5% Slash Damage & +3% Pierce Damage & −4% Bludgeon Damage,Wieldable
+Compact,°,−0.5 Reach & +1 Initiative & +4% Attack,Wieldable
+Crude,°,+5% Damage & −4% Attack & −2% Critical Scale,Wieldable
+Battle-Scarred,°,−3% all stats & +5% Physical Penetration,Wieldable
+Scavenged,°,−4% all stats & +4% Damage,Wieldable
+Trophy-Marked,°,+3% Critical Scale & −3% Attack,Wieldable

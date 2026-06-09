@@ -1,0 +1,3 @@
+channel,formula
+physical,"atk.raw * (1 - MAX(0, def.res - atk.pen))"
+magic,"atk.raw * (1 - MAX(0, def.res - atk.pen))"

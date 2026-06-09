@@ -1,0 +1,8 @@
+type,raw,penetration,defense,channel
+bludgeon,bludgeon,bludgeon_penetration,bludgeon_resistance,physical
+pierce,pierce,pierce_penetration,pierce_resistance,physical
+slash,slash,slash_penetration,slash_resistance,physical
+arcana,arcana,,arcana_ward,magic
+aether,aether,,aether_ward,magic
+ethereal,ethereal,,ethereal_ward,magic
+ichor,ichor,,ichor_ward,magic

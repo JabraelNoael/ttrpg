@@ -1,0 +1,1019 @@
+{
+  "events": {
+
+    "died": true,
+
+    "on_death": {
+      "killed_by": {
+        "physical": true,
+        "magical": true,
+        "ranged": true,
+        "dot": true,
+        "fall": true,
+        "self": true
+      },
+      "killed_by_enemy_type": {
+        "humanoid": true,
+        "beast": true,
+        "undead": true,
+        "elemental": true,
+        "construct": true,
+        "fiend": true,
+        "celestial": true
+      },
+      "last_stand": true,
+      "downed": true,
+      "resurrected": true
+    },
+
+    "on_kill": {
+      "first_kill_this_combat": true,
+      "kill_streak": {
+        "n_kills": [2, 3, 4, 5]
+      },
+      "overkill": true,
+      "last_enemy": true,
+      "execution": true,
+      "mercy_kill": true
+    },
+
+    "in_combat": {
+
+      "damage_taken": {
+        "physical": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_block": true,
+          "on_parry": true,
+          "on_dodge": true,
+          "on_resist": true
+        },
+        "magical": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_block": true,
+          "on_resist": true,
+          "on_absorb": true,
+          "on_reflect": true
+        },
+        "ranged": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_block": true,
+          "on_dodge": true,
+          "on_deflect": true
+        },
+        "true": {
+          "on_hit": true
+        },
+        "reflected": {
+          "on_hit": true
+        },
+        "fall": {
+          "on_hit": true,
+          "on_survive": true,
+          "on_death": true
+        },
+        "self_inflicted": {
+          "on_hit": true
+        },
+        "dot": {
+          "on_tick": true,
+          "on_kill": true,
+          "on_expire": true,
+          "poison": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "burn": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "bleed": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "freeze": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "shock": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "rot": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          },
+          "wither": {
+            "on_tick": true,
+            "on_kill": true,
+            "on_expire": true,
+            "on_resist": true,
+            "on_cleanse": true
+          }
+        }
+      },
+
+      "damage_dealt": {
+        "physical": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_kill": true,
+          "on_miss": true,
+          "on_glance": true
+        },
+        "magical": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_kill": true,
+          "on_miss": true,
+          "on_resist": true,
+          "on_absorb": true
+        },
+        "ranged": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_kill": true,
+          "on_miss": true,
+          "on_deflect": true
+        },
+        "true": {
+          "on_hit": true,
+          "on_kill": true
+        },
+        "aoe": {
+          "on_hit": true,
+          "on_crit": true,
+          "on_kill": true,
+          "on_miss": true
+        },
+        "cleave": {
+          "on_hit": true,
+          "on_kill": true
+        },
+        "dot_applied": {
+          "poison": true,
+          "burn": true,
+          "bleed": true,
+          "freeze": true,
+          "shock": true,
+          "rot": true,
+          "wither": true
+        },
+        "dot_tick": {
+          "poison": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "burn": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "bleed": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "freeze": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "shock": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "rot": {
+            "on_tick": true,
+            "on_kill": true
+          },
+          "wither": {
+            "on_tick": true,
+            "on_kill": true
+          }
+        }
+      },
+
+      "status_effects": {
+        "applied": {
+          "stunned": true,
+          "frozen": true,
+          "silenced": true,
+          "rooted": true,
+          "blinded": true,
+          "frightened": true,
+          "charmed": true,
+          "confused": true,
+          "cursed": true,
+          "bleeding": true,
+          "burning": true,
+          "poisoned": true,
+          "withered": true,
+          "rotting": true,
+          "shocked": true,
+          "chilled": true,
+          "slowed": true,
+          "hasted": true,
+          "invisible": true,
+          "incorporeal": true
+        },
+        "resisted": {
+          "stunned": true,
+          "frozen": true,
+          "silenced": true,
+          "rooted": true,
+          "blinded": true,
+          "frightened": true,
+          "charmed": true,
+          "confused": true,
+          "cursed": true,
+          "bleeding": true,
+          "burning": true,
+          "poisoned": true,
+          "withered": true,
+          "rotting": true,
+          "shocked": true,
+          "chilled": true,
+          "slowed": true,
+          "hasted": true,
+          "invisible": true,
+          "incorporeal": true
+        },
+        "expired": {
+          "stunned": true,
+          "frozen": true,
+          "silenced": true,
+          "rooted": true,
+          "blinded": true,
+          "frightened": true,
+          "charmed": true,
+          "confused": true,
+          "cursed": true,
+          "bleeding": true,
+          "burning": true,
+          "poisoned": true,
+          "withered": true,
+          "rotting": true,
+          "shocked": true,
+          "chilled": true,
+          "slowed": true,
+          "hasted": true,
+          "invisible": true,
+          "incorporeal": true
+        },
+        "cleansed": {
+          "stunned": true,
+          "frozen": true,
+          "silenced": true,
+          "rooted": true,
+          "blinded": true,
+          "frightened": true,
+          "charmed": true,
+          "confused": true,
+          "cursed": true,
+          "bleeding": true,
+          "burning": true,
+          "poisoned": true,
+          "withered": true,
+          "rotting": true,
+          "shocked": true,
+          "chilled": true,
+          "slowed": true,
+          "hasted": true,
+          "invisible": true,
+          "incorporeal": true
+        },
+        "stacked": {
+          "stunned": { "n": true },
+          "frozen": { "n": true },
+          "silenced": { "n": true },
+          "rooted": { "n": true },
+          "blinded": { "n": true },
+          "frightened": { "n": true },
+          "charmed": { "n": true },
+          "confused": { "n": true },
+          "cursed": { "n": true },
+          "bleeding": { "n": true },
+          "burning": { "n": true },
+          "poisoned": { "n": true },
+          "withered": { "n": true },
+          "rotting": { "n": true },
+          "shocked": { "n": true },
+          "chilled": { "n": true },
+          "slowed": { "n": true },
+          "hasted": { "n": true },
+          "invisible": { "n": true },
+          "incorporeal": { "n": true }
+        }
+      },
+
+      "enemy": {
+        "missed": true,
+        "fled": true,
+        "surrendered": true,
+        "called_for_help": true,
+        "enraged": true,
+        "stunned": true,
+        "on_spawn": true
+      },
+
+      "player_actions": {
+        "fled": true,
+        "missed": true,
+        "used_item": {
+          "consumable": true,
+          "throwable": true,
+          "scroll": true
+        },
+        "switched_weapon": true,
+        "sheathed": true,
+        "unsheathed": true,
+        "mounted": true,
+        "dismounted": true,
+        "grappled": true,
+        "grapple_broken": true,
+        "grapple_escaped": true,
+        "disarmed": true,
+        "disarm_attempted": true,
+        "shoved": true,
+        "shove_resisted": true,
+        "taunted": true,
+        "taunt_resisted": true,
+        "feinted": true,
+        "parried": true,
+        "riposted": true
+      },
+
+      "turn_tracking": {
+        "on_turn_start": true,
+        "on_turn_end": true,
+        "been_1_turn": true,
+        "been_n_turns": {
+          "n2": true,
+          "n3": true,
+          "n4": true,
+          "n5": true,
+          "n10": true
+        },
+        "combat_round": {
+          "round_start": true,
+          "round_end": true
+        },
+        "been_1_round": true,
+        "been_n_rounds": {
+          "n2": true,
+          "n3": true,
+          "n5": true,
+          "n10": true
+        },
+        "first_round": true,
+        "last_round": true
+      },
+
+      "positioning": {
+        "entered_melee_range": true,
+        "exited_melee_range": true,
+        "flanking": true,
+        "flanked": true,
+        "high_ground": true,
+        "low_ground": true,
+        "cover": {
+          "partial": true,
+          "full": true
+        },
+        "prone": {
+          "fell": true,
+          "stood_up": true
+        },
+        "pushed": true,
+        "pulled": true,
+        "thrown": true,
+        "teleported": true
+      }
+    },
+
+    "casting": {
+      "on_cast": true,
+      "on_hit": true,
+      "on_crit": true,
+      "on_miss": true,
+      "on_resist": true,
+      "on_absorb": true,
+      "on_reflect": true,
+      "interrupted": true,
+      "fizzled": true,
+      "counterspelled": true,
+      "spell_school": {
+        "arcana": true,
+        "aether": true,
+        "ethereal": true,
+        "ichor": true,
+        "magia": true
+      },
+      "spell_type": {
+        "damage": true,
+        "heal": true,
+        "buff": true,
+        "debuff": true,
+        "summon": true,
+        "control": true,
+        "utility": true,
+        "ritual": true
+      },
+      "concentration": {
+        "started": true,
+        "maintained": true,
+        "broken": true,
+        "ended_naturally": true
+      },
+      "ritual": true,
+      "target": {
+        "self": true,
+        "ally": true,
+        "enemy": true,
+        "area": true
+      },
+      "channel": {
+        "on_start": true,
+        "on_tick": true,
+        "on_end": true,
+        "on_interrupted": true
+      }
+    },
+
+    "movement": {
+      "when_moving": true,
+      "walking": {
+        "on_start": true,
+        "on_stop": true,
+        "on_step_n": true,
+        "entered_terrain": {
+          "grass": true,
+          "stone": true,
+          "mud": true,
+          "snow": true,
+          "sand": true,
+          "water_shallow": true
+        }
+      },
+      "running": {
+        "on_start": true,
+        "on_stop": true,
+        "on_sprint_start": true,
+        "on_sprint_end": true,
+        "on_exhaustion": true
+      },
+      "swimming": {
+        "on_start": true,
+        "on_stop": true,
+        "on_submerge": true,
+        "on_surface": true,
+        "on_drown_threshold": true,
+        "on_drown": true
+      },
+      "jumping": {
+        "on_jump": true,
+        "on_land": true,
+        "on_land_safe": true,
+        "on_land_hard": true,
+        "on_land_fatal": true,
+        "on_double_jump": true,
+        "on_long_jump": true
+      },
+      "climbing": {
+        "on_start": true,
+        "on_stop": true,
+        "on_slip": true,
+        "on_fall": true,
+        "on_reach_top": true
+      },
+      "falling": {
+        "on_start": true,
+        "on_land": true,
+        "on_land_safe": true,
+        "on_land_hard": true,
+        "on_land_fatal": true
+      },
+      "crawling": {
+        "on_start": true,
+        "on_stop": true
+      },
+      "sneaking": {
+        "on_start": true,
+        "on_stop": true,
+        "on_detected": true,
+        "on_undetected": true
+      },
+      "flying": {
+        "on_start": true,
+        "on_stop": true,
+        "on_ascend": true,
+        "on_descend": true,
+        "on_hover": true,
+        "on_stall": true,
+        "on_crash": true
+      },
+      "teleporting": {
+        "on_cast": true,
+        "on_depart": true,
+        "on_arrive": true,
+        "on_fail": true
+      },
+      "mounted": {
+        "on_mount": true,
+        "on_dismount": true,
+        "on_gallop": true,
+        "on_thrown_from_mount": true
+      },
+      "zone": {
+        "entered_zone": {
+          "dungeon": true,
+          "town": true,
+          "wilderness": true,
+          "indoor": true,
+          "outdoor": true,
+          "underwater": true,
+          "extraplanar": true
+        },
+        "exited_zone": true,
+        "crossed_threshold": true
+      },
+      "been_stationary_n_turns": {
+        "n1": true,
+        "n2": true,
+        "n3": true,
+        "n5": true,
+        "n10": true
+      }
+    },
+
+    "time": {
+      "on_turn_start": true,
+      "on_turn_end": true,
+      "been_1_turn": true,
+      "been_n_turns": {
+        "n2": true,
+        "n3": true,
+        "n5": true,
+        "n10": true
+      },
+      "on_round_start": true,
+      "on_round_end": true,
+      "been_1_round": true,
+      "been_n_rounds": {
+        "n2": true,
+        "n3": true,
+        "n5": true,
+        "n10": true
+      },
+      "rest": {
+        "short_rest": {
+          "on_start": true,
+          "on_end": true
+        },
+        "long_rest": {
+          "on_start": true,
+          "on_end": true
+        },
+        "sleep": {
+          "on_dream": true,
+          "on_nightmare": true,
+          "on_interrupted": true
+        }
+      },
+      "time_of_day": {
+        "dawn": true,
+        "morning": true,
+        "midday": true,
+        "afternoon": true,
+        "dusk": true,
+        "evening": true,
+        "midnight": true,
+        "deep_night": true,
+        "on_change": true
+      },
+      "day_n": true,
+      "season": {
+        "spring": true,
+        "summer": true,
+        "autumn": true,
+        "winter": true,
+        "on_change": true
+      },
+      "weather": {
+        "clear": true,
+        "overcast": true,
+        "rain": true,
+        "storm": true,
+        "snow": true,
+        "fog": true,
+        "hail": true,
+        "magical_weather": true,
+        "on_change": true
+      }
+    },
+
+    "social": {
+      "talked_to_npc": {
+        "on_greet": true,
+        "on_farewell": true,
+        "on_topic": {
+          "quest": true,
+          "lore": true,
+          "shop": true,
+          "rumor": true,
+          "personal": true
+        }
+      },
+      "dialogue_choice_made": {
+        "outcome": {
+          "positive": true,
+          "negative": true,
+          "neutral": true,
+          "branching": true
+        }
+      },
+      "persuasion_attempted": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "critical_fail": true
+      },
+      "intimidation_attempted": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "critical_fail": true
+      },
+      "deception_attempted": {
+        "succeeded": true,
+        "failed": true,
+        "detected": true,
+        "critical_success": true,
+        "critical_fail": true
+      },
+      "insight_check": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "critical_fail": true
+      },
+      "performance_attempted": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "crowd_reaction": true
+      },
+      "npc_relationship": {
+        "improved": true,
+        "worsened": true,
+        "neutral": true,
+        "became_ally": true,
+        "became_hostile": true,
+        "became_vendor": true,
+        "became_quest_giver": true
+      },
+      "npc_state": {
+        "happy": true,
+        "angry": true,
+        "fearful": true,
+        "curious": true,
+        "suspicious": true,
+        "indifferent": true,
+        "charmed": true,
+        "hostile": true
+      },
+      "rumor_heard": true,
+      "secret_learned": true,
+      "reputation_changed": {
+        "scope": {
+          "faction": true,
+          "town": true,
+          "region": true
+        },
+        "direction": {
+          "increased": true,
+          "decreased": true
+        },
+        "threshold_reached": {
+          "exalted": true,
+          "friendly": true,
+          "neutral": true,
+          "hostile": true,
+          "hated": true
+        }
+      },
+      "bribe_attempted": {
+        "accepted": true,
+        "refused": true
+      },
+      "gift_given": {
+        "accepted": true,
+        "refused": true,
+        "relationship_changed": true
+      },
+      "trade_completed": true,
+      "quest": {
+        "received": true,
+        "updated": true,
+        "completed": true,
+        "failed": true,
+        "abandoned": true
+      },
+      "on_npc_death": {
+        "ally": true,
+        "neutral": true,
+        "enemy": true,
+        "quest_giver": true,
+        "vendor": true,
+        "named": true
+      }
+    },
+
+    "inventory": {
+      "item_acquired": {
+        "source": {
+          "looted": true,
+          "purchased": true,
+          "crafted": true,
+          "rewarded": true,
+          "stolen": true,
+          "found": true
+        }
+      },
+      "item_lost": {
+        "source": {
+          "sold": true,
+          "dropped": true,
+          "stolen": true,
+          "consumed": true,
+          "destroyed": true
+        }
+      },
+      "item_equipped": {
+        "slot": {
+          "helmet": true,
+          "gorget": true,
+          "pauldrons": true,
+          "chestplate": true,
+          "rerebrace": true,
+          "couter": true,
+          "vambrace": true,
+          "gauntlets": true,
+          "cuisse": true,
+          "poleyn": true,
+          "greaves": true,
+          "sabatons": true,
+          "eyewear": true,
+          "headwear": true,
+          "forehead": true,
+          "neckwear": true,
+          "earrings": true,
+          "mask": true,
+          "ring": true,
+          "belt": true,
+          "anklewear": true,
+          "tunic": true,
+          "pants": true,
+          "socks": true
+        },
+        "type": {
+          "weapon": true,
+          "armor": true,
+          "accessory": true,
+          "underarmor": true
+        }
+      },
+      "item_unequipped": true,
+      "item_used": {
+        "consumable": true,
+        "scroll": true,
+        "throwable": true,
+        "tool": true,
+        "key": true
+      },
+      "item_identified": true,
+      "item_broken": true,
+      "item_repaired": true,
+      "item_upgraded": true,
+      "item_enchanted": true,
+      "item_cursed": true,
+      "container_opened": {
+        "type": {
+          "chest": true,
+          "barrel": true,
+          "crate": true,
+          "body": true,
+          "hidden_cache": true
+        },
+        "loot_table_rolled": {
+          "common": true,
+          "uncommon": true,
+          "rare": true,
+          "epic": true,
+          "legendary": true,
+          "cursed": true,
+          "empty": true,
+          "trapped": true
+        }
+      },
+      "loot_trap_triggered": {
+        "poison_dart": true,
+        "explosion": true,
+        "alarm": true,
+        "teleport": true
+      },
+      "pickpocketed": {
+        "succeeded": true,
+        "failed": true,
+        "detected": true
+      },
+      "stolen_from": {
+        "detected": true,
+        "undetected": true
+      },
+      "gold_changed": {
+        "gained": {
+          "threshold_1": true,
+          "threshold_10": true,
+          "threshold_100": true,
+          "threshold_1000": true
+        },
+        "lost": {
+          "threshold_1": true,
+          "threshold_10": true,
+          "threshold_100": true,
+          "threshold_1000": true
+        }
+      },
+      "encumbrance": {
+        "on_encumbered": true,
+        "on_over_encumbered": true,
+        "on_unencumbered": true
+      },
+      "bag_full": true
+    },
+
+    "progression": {
+      "xp_gained": {
+        "source": {
+          "combat": true,
+          "quest": true,
+          "exploration": true,
+          "social": true,
+          "crafting": true
+        }
+      },
+      "level_up": {
+        "new_level": true
+      },
+      "talent_unlocked": true,
+      "talent_upgraded": true,
+      "ability_learned": true,
+      "attribute_increased": true,
+      "attribute_decreased": true
+    },
+
+    "exploration": {
+      "discovered": {
+        "location": true,
+        "landmark": true,
+        "secret_area": true,
+        "dungeon": true,
+        "trap": true,
+        "hidden_passage": true,
+        "interactable": true
+      },
+      "trap": {
+        "on_detect": true,
+        "on_disarm": true,
+        "on_disarm_fail": true,
+        "on_spring": true,
+        "type": {
+          "poison_dart": true,
+          "explosion": true,
+          "alarm": true,
+          "teleport": true,
+          "pit": true,
+          "magic": true
+        }
+      },
+      "puzzle": {
+        "on_start": true,
+        "on_progress": true,
+        "on_solve": true,
+        "on_fail": true
+      },
+      "environmental_hazard": {
+        "on_enter": true,
+        "on_tick": true,
+        "on_exit": true,
+        "type": {
+          "fire": true,
+          "acid": true,
+          "ice": true,
+          "poison_gas": true,
+          "darkness": true,
+          "antimagic": true
+        }
+      },
+      "rested_at": {
+        "inn": true,
+        "camp": true,
+        "dungeon_safe_room": true
+      },
+      "fast_traveled": true,
+      "portal_entered": true,
+      "portal_exited": true
+    },
+
+    "dice": {
+      "rolled": {
+        "d4": true,
+        "d6": true,
+        "d8": true,
+        "d10": true,
+        "d12": true,
+        "d20": true,
+        "d100": true
+      },
+      "nat_1": {
+        "attack": true,
+        "talent_check": true,
+        "saving_throw": true
+      },
+      "nat_20": {
+        "attack": true,
+        "talent_check": true,
+        "saving_throw": true
+      },
+      "saving_throw": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "critical_fail": true,
+        "type": {
+          "strength": true,
+          "dexterity": true,
+          "constitution": true,
+          "intelligence": true,
+          "wisdom": true,
+          "charisma": true
+        }
+      },
+      "ability_check": {
+        "succeeded": true,
+        "failed": true,
+        "critical_success": true,
+        "critical_fail": true,
+        "type": {
+          "strength": true,
+          "dexterity": true,
+          "constitution": true,
+          "intelligence": true,
+          "wisdom": true,
+          "charisma": true
+        }
+      },
+      "advantage_used": true,
+      "disadvantage_applied": true,
+      "luck_triggered": true,
+      "inspiration_used": true,
+      "inspiration_gained": true
+    },
+
+    "party": {
+      "party_size_changed": {
+        "member_added": true,
+        "member_removed": true,
+        "member_downed": true,
+        "member_died": true
+      }
+    },
+
+    "session": {
+      "session_start": true,
+      "session_end": true,
+      "on_save": true,
+      "on_load": true
+    }
+
+  }
+}

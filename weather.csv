@@ -1,0 +1,11 @@
+weather,weight,persistence,description,transitions
+clear,30,0.6,clear skies,{}
+cloudy,20,0.5,grey overcast,{}
+drizzle,10,0.4,light drizzle,{}
+rain,12,0.55,steady rain,{}
+storm,5,0.4,thunderstorm,{}
+fog,8,0.45,thick fog,{}
+windy,8,0.4,strong winds,{}
+snow,5,0.6,falling snow,{}
+hail,2,0.2,pelting hail,{}
+heatwave,3,0.5,sweltering heat,{}

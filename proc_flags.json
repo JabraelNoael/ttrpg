@@ -1,0 +1,9 @@
+{
+  "proc":{
+    "on_death": true,
+    "is_dead": true,
+    "on_swimming": true,
+    "is_swimming": true,
+    ""
+  }
+}

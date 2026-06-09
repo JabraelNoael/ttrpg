@@ -1,0 +1,120 @@
+{
+  "cells": {
+    "0,0": {
+      "biome": "plains",
+      "name": ""
+    },
+    "1,0": {
+      "biome": "plains",
+      "name": ""
+    },
+    "0,1": {
+      "biome": "forest",
+      "name": ""
+    },
+    "1,1": {
+      "biome": "forest",
+      "name": ""
+    },
+    "2,0": {
+      "biome": "forest",
+      "name": ""
+    },
+    "2,1": {
+      "biome": "jungle",
+      "name": ""
+    },
+    "2,2": {
+      "biome": "jungle",
+      "name": ""
+    },
+    "3,0": {
+      "biome": "forest",
+      "name": ""
+    },
+    "3,1": {
+      "biome": "forest",
+      "name": ""
+    },
+    "3,2": {
+      "biome": "jungle",
+      "name": ""
+    },
+    "3,3": {
+      "biome": "taiga",
+      "name": ""
+    },
+    "3,4": {
+      "biome": "taiga",
+      "name": ""
+    },
+    "4,4": {
+      "biome": "savannah",
+      "name": ""
+    },
+    "5,5": {
+      "biome": "desert",
+      "name": ""
+    },
+    "4,5": {
+      "biome": "mesa",
+      "name": ""
+    },
+    "5,4": {
+      "biome": "hills",
+      "name": ""
+    },
+    "1,5": {
+      "biome": "mountain",
+      "name": ""
+    },
+    "2,5": {
+      "biome": "volcano",
+      "name": ""
+    },
+    "3,5": {
+      "biome": "cave",
+      "name": ""
+    },
+    "5,1": {
+      "biome": "tundra",
+      "name": ""
+    },
+    "5,2": {
+      "biome": "glacier",
+      "name": ""
+    },
+    "5,3": {
+      "biome": "water",
+      "name": ""
+    },
+    "6,0": {
+      "biome": "swamp",
+      "name": ""
+    },
+    "6,1": {
+      "biome": "swamp",
+      "name": ""
+    },
+    "6,2": {
+      "biome": "lake",
+      "name": ""
+    },
+    "6,3": {
+      "biome": "river",
+      "name": ""
+    },
+    "6,4": {
+      "biome": "beach",
+      "name": ""
+    },
+    "6,5": {
+      "biome": "default",
+      "name": ""
+    }
+  },
+  "pos": [
+    0,
+    0
+  ]
+}
