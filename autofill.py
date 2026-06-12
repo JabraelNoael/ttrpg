@@ -19,7 +19,7 @@ classes whose NBT should autofill. After changing vocab, call refresh() (or use
 register_command / register_class) to keep completion live.
 """
 
-from containers import Item, Talent, Ability, Effect, Stat, Player, Mob
+from containers import Item, Talent, Ability, Effect, Quest, Structure, Stat, Player, Mob
 
 
 class Completer:
@@ -111,11 +111,11 @@ class Autofill:
 # --- CONFIG / BOOT -----------------------------------------------------------
 # Command names (no leading slash). When the real command parser exists it can
 # register names automatically instead of relying on this static list.
-COMMANDS = ["help", "character", "stat", "attack", "formula", "item", "turn", "calendar", "event", "map", "proc", "data", "function", "session", "execute", "tellraw", "summon", "effect", "kill", "talent", "ability"]
+COMMANDS = ["help", "character", "stat", "attack", "move", "formula", "item", "turn", "calendar", "event", "map", "proc", "data", "function", "session", "execute", "tellraw", "random", "quest", "structure", "uuid", "summon", "effect", "kill", "talent", "ability"]
 
 # Classes whose NBT keys should autofill. Add specific subclasses here as you
 # build them; each subclass's NBT is merged with the inherited GENERIC_NBT.
-NBT_CLASSES = [Item, Talent, Ability, Effect, Stat, Player, Mob]
+NBT_CLASSES = [Item, Talent, Ability, Effect, Quest, Structure, Stat, Player, Mob]
 
 # Ready-to-use engine, built from the config above. Import this: `from autofill import autofill`
 autofill = Autofill(commands=COMMANDS, classes=NBT_CLASSES)

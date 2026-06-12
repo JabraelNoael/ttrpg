@@ -1,358 +1,354 @@
-# TTRPG World Model — How To Use It
+# TTRPG World Model — Command Reference
 
-## Files
-
-### Code
-
-| File | What it is | Creates anything on its own? |
-|---|---|---|
-| `containers.py` | The library: all the classes (Player, Item, Stat, …). | **No.** Just definitions. |
-| `autofill.py` | Completion engine + a ready `autofill` object. | No game entities. |
-| `repl.py` | The interactive command shell + live TAB completion. | Only when you run it. |
-| `main.py` | Entry point — launches the shell. | Launches `repl.run()`. |
-
-### Data
-
-| File | What it is |
-|---|---|
-| `materials.csv` | Contains information about different materials within the world, their strengths and generic stat modifiers |
-| `body_coverage.csv` | Contains proportions on how to handle how much coverage you get from a helmet or chestplate or etc. |
-| `stats.csv` | Contains all of the player's generic stats, on new characer creation initialize all of these to None |
-| `prefixes.csv` | Contains recognized prefixes for gear, prefixes modify gear's stats and can be rerolled |
-| `suffixes.csv` | Contains recognized suffixes for gear, suffixes modify gear's capabilities and need to be renechanted or resocketed |
-| `weather.csv` | Contains recognized weather types and weights as well as persistence which help determine how likely the weather event is to occur and how long it should linger to reflect how long rain or sun etc. last |
-| `biomes.json` | Contains all information about specific biomes that can appear including weather modifiers and ASCII visuals |
-| `bestiary.json` | Contains mobs that players can encounter |
-
----
-
-## A) The command shell
+Run it:
 
 ```bash
 cd /Users/jnoael/ttrpg
-python3 main.p
+python3 main.py
 ```
 
-You get a `ttrpg>` prompt. **Press TAB to complete at any position** — like `cd <TAB>`:
-
-- `/char` + TAB → `/character` · `/` + TAB → every command
-- `/character ` + TAB → `add modify get show list remove` (subcommands)
-- `/character add ` + TAB → existing character names
-- `/stat hero ` + TAB → `set add modify get list` (operations)
-- inside item NBT, e.g. `iron_sword{pr` + TAB → `prefix`
-
-Commands so far (the rest are recognized but not wired yet):
-
-**Terminology:** `<selector>` = who (a name, or `@a` = all players, `@!a` = all non-player
-entities — none yet). `<obj>` = which item (a type_id, a name, an `[index]`, `type[N]`, or
-`type{nbt}`). `<set|add|reset>` = the operation. **TAB lists what's available at each spot.**
-
-```
-/character add <name>[{nbt}]                     create a character, optionally with NBT
-/character modify <selector> <set|add|reset> {nbt}   edit dynamic NBT (see below)
-/character modify <name>.<field>(<value>)        legacy single-field set (still works)
-/character get <selector> <field>                read a field (handled or dynamic)
-/character show <selector>   |   /character list   |   /character remove <selector>
-
-/stat add <selector> <name> [value]               create/set a stat (or {name:val,...} bulk)
-/stat modify <selector> <name> <set|add|reset> <value>   set/add to the value; reset -> 0
-/stat get <selector> <name>  |  list <selector>  |  remove <selector> <name>
-/attribute ...                                   identical, on attributes
-
-/item add <selector> <obj>[{nbt}] [count]         create an item -> inventory (merges if identical)
-/item remove <selector> <obj> [count]             remove count copies (default: whole stack)
-/item list <selector>                             show the inventory (indices + counts)
-/item modify <selector> <obj> <set|add|reset> <field> <value>   edit (or set|add|reset {nbt})
-/item loot <table> <selector>                     DUMMY roll (real loottables come later)
-
-/kill <selector>                                  remove player(s) (shorthand; will cover NPCs)
-/turn query | next | add <value> | set <value> [silent]    the turn counter (see below)
-/talent  <add|list|modify|remove> <selector> <name>{nbt}   manage talents
-/effect  <add|list|modify|remove> <selector> <name>{nbt}   manage status effects
-/ability <add|list|modify|remove> <selector> <name>{nbt}   manage abilities
-/ability cast <selector> <obj>                             pay cost + trigger cooldown
-/proc <pulse|enable|disable|query> <selector> <a,b,c>      fire talents via signals
-```
-
-**Procs & talents** — a talent can react to signals:
-
-```
-proc:[{in_combat:true,end_of_turn:true}]   conditions that must ALL hold (AND)
-reaction:[stats.health(-5)]                what happens when it fires (class-path deltas)
-```
-
-`/proc` sets signals on the selector and fires any talent whose `proc` conditions match
-the player's current signals (absent signal = false, so `scared:false` holds until you
-enable `scared`):
-
-```
-/proc enable noael in_combat        # sticky: stays on; fires matching talents now
-/proc enable noael end_of_turn      # now in_combat AND end_of_turn -> deathblast fires
-/proc pulse  noael in_combat,end_of_turn   # momentary: on -> fire -> revert
-/proc disable noael in_combat       # turn a signal off
-/proc query  noael                  # show active signals
-```
-
-Proc names autocomplete from `proc_tree.json` (a big namespace of suggestions —
-`in_combat`, `on_turn_end`, `damage_dealt`, …) but you can use any name you like. The
-reaction modifies the talent owner's own stats for now (real targeting/AoE comes later).
-
-**Cooldowns** are `current/total` turns: `0/7` = ready, `7/7` = just cast. Add an ability
-with `cooldown:7` (total; starts ready at `0/7`) or `cooldown:4/7` (4 turns left). Casting
-sets `current = total`; each turn (`/turn next|add`) counts it down to `0`. Set either side
-on its own with `set cooldown[0] <n>` (current) or `set cooldown[1] <n>` (total), or both
-at once with `set cooldown <cur>/<tot>`.
-
-`add` appends to list fields too: `... add cost stats.health(1)` tacks another cost onto
-the existing list (alongside numeric-add and string-concat).
-
-**Costs** are a list of class-path deductions spent on cast:
-`cost:[stats.mana(20),stats.health(1)]` — the path picks WHICH stat/attribute to spend, so
-costs can come from anything (`attributes.max_mana(1)` works too). `/ability cast` checks
-you can afford all of them (else it casts nothing) and that the cooldown is ready, and lists
-**every** blocking reason at once (on cooldown + each unmet cost), not just the first.
-
-```
-/ability add noael firebolt{cooldown:3,cost:[stats.mana(20),stats.health(1)]}
-/ability cast noael firebolt        # mana-20, health-1, cooldown -> 3/3
-/turn add 3                         # cooldown ticks 3/3 -> 0/3 (ready again)
-```
-
-**Picking a specific item** (`<obj>`) when you have duplicates — TAB after the selector
-lists them:
-
-```
-/item modify noael [0] set name "x"               # by inventory index (from /item list)
-/item modify noael healing_potion[1] set name "x" # the 2nd healing_potion stack
-/item modify noael healing_potion{name:"x"} ...   # the stack matching those nbt fields
-/item modify noael healing_potion ...             # the first matching stack
-```
-
-**`/turn`** — a global turn counter (foundation for per-turn procs later):
-
-```
-/turn query          show the current turn
-/turn next           +1   (same as /turn add 1)
-/turn add <n>        advance by n
-/turn set <n>        jump to n, walking each turn; prints the signed difference
-/turn set <n> true   jump to n silently (just corrects the counter, nothing ticks)
-```
-
-**Advancing a turn ticks the clock:** each turn that passes (`next`, `add`, or a forward
-`set`) decrements every ability's `cooldown` (clearing it at 0 = ready) and every effect's
-`duration` (removing the effect at 0). `set <n> true` is the escape hatch that fixes the
-number without ticking. `_advance_turn` in repl.py is also where future per-turn procs
-(heal-per-turn, etc.) will fire.
-
-Element displays use **full field names** in the `name{...}` form, e.g.
-`firebolt{level:1,description:"",cooldown:2t,cost:200mana,origin:""}` — what you see is what
-you type (`set cooldown 4t`, not `cd`).
-
-`@a` applies a command to every player at once (`/stat @a set health 20`, `/item give @a potion`).
-
-### Dynamic NBT: `set` / `add` / `reset`
-
-Characters and items both have **free-form NBT** — handled keys route to real structure
-(a character's `inventory_slots` → inventory capacity; an item's `count` → quantity),
-and any other key (`race`, `class`, `subclass`, `sharpness`, `rage`…) is just stored.
-Nothing needs to be predefined — invent a key and use it. The three ops, shared by
-`/character modify` and `/item modify`:
-
-```
-set {nbt}      overlay the given keys      set {race:"elf",inventory_slots:7}
-set <f> <v>    one field                   set name "murmur"
-add {nbt}      numeric add / string concat add {inventory_slots:5}   add {name:" world"}
-reset {keys}   handled keys -> default; dynamic keys removed     reset {subclass}
-reset {}       reset everything
-```
-
-The op word can sit on either side (`set name X` or `name set X`), like `/stat`. You can
-also create with NBT directly: `/character add hero{race:"tiefling",inventory_slots:7}`.
-
-`/item modify` affects **one** copy by default, splitting it off the stack; use
-`<obj>{count:N}` to affect N (`add` concatenates strings, e.g. → "murmur the blade").
-The `<obj>` selector picks **which** item when you have duplicates:
-
-```
-/item modify hero [1] set name "murmur"            # by inventory index (see /item list)
-/item modify hero iron_sword{name:"poop"} add count 1   # by matching NBT fields
-/item modify hero iron_sword{count:2} add count 5  # affect 2 copies
-/item modify hero murmur add name " the blade"     # by name; string concat
-/item modify hero murmur reset {prefix}            # remove a key
-```
-
-Reading values without a command (bare path, no slash):
-
-```
-hero.inventory_slots          ->  27
-hero.race                     ->  'tiefling'   (dynamic nbt key)
-hero.stats.health             ->  6
-hero.inventory_slots(3)       ->  sets it (same as /character modify)
-hero.subclass("ranger")       ->  sets a dynamic key
-```
-
-`/stat`'s operation word is found wherever it sits, so **both of these work**:
-`/stat hero health set 3` and `/stat hero set health 3`. set/add/modify on a missing
-stat create it at 0 first, so `/stat hero health add 3` on a fresh character gives 3.
-
-NBT text round-trips: what an item prints as is exactly what `/item give` parses back.
-Strings go in double quotes; an interior `"` is written `\"`; apostrophes need nothing.
-A trailing count overrides any `count:` in the NBT.
-
-```
-/item give hero potion 5
-/item give hero iron_sword{prefix:sharp,origin:"Dungeon Chest"}
-/item give hero iron_sword{name:"Ira' kurri",description:"says \"hi\", loudly"} 9
-```
-
-> **Stacking:** identical items auto-merge. "Identical" = same `type_id` AND same
-> name/description/NBT (count is summed, not compared). So `/item give hero iron_sword`
-> twice = one stack of x2. Modifying part of a stack splits it back out (see `/item modify`).
-> Known limit: an item whose **name has spaces** can't be selected by name yet (the selector
-> reads a single token) — rename back or use its `type_id`.
-
-Abbreviations work everywhere: `/char a` + TAB → `add`; `/char add hero` == `/character add hero`.
-
-**Adding more:** a settable `/character` field = one line in `CHARACTER_FIELDS` (now a
-`(getter, setter)` pair) in `repl.py`. A new command = a handler + a line in `HANDLERS`;
-make its args completable via `ARG_SCHEMA` / `SUBCOMMANDS`. Still to wire: `/effect`,
-`/talent`, `/ability`, `/kill`, `/summon`, `/execute`.
+You get a `ttrpg>` prompt. **Press TAB anywhere** to complete commands, subcommands, selectors, item names, NBT keys, and operators. Abbreviations resolve (`/char`→`/character`).
 
 ---
 
-## B) The Python API
+## Functions, reactions & hooks (read this first)
 
-```python
-from containers import Player, Item, Talent, Ability, Attribute, Stat
+A **function** is a saved list of command lines. **Reactions** and **hooks** (`on_hit`, `on_equip`, `proc reaction`, …) can run deltas AND/OR call functions. The #1 syntax trap is how you call a function from inside a reaction.
+
+### Calling a function from a reaction/hook
+
+A function call is **just the bare function name**. These all work:
+
+```
+[poison]                 # calls function "poison"
+[/function poison]       # same
+[/poison]                # same
 ```
 
-### Create a character
+These DO NOT work:
 
-```python
-hero = Player("Alfred Winkleberry")                       # unlimited inventory
-hero = Player("Alfred Winkleberry", inventory_slots=27)   # capped at 27 stacks
+```
+[/function run poison]   # IGNORED — the "run" keyword + space breaks it
+[function:poison]        # treated as a function literally named "function:poison" (missing)
 ```
 
-Every player starts with empty containers: `hero.inventory`, `hero.equipment`,
-`hero.stats`, `hero.attributes`, `hero.talents`, `hero.abilities`.
+A reaction is a list; mix deltas and function calls freely (run in order):
 
-### Stats and Attributes — `set` / `add` / `modify`
-
-`set`/`add`/`modify` are methods **on the value object itself** (this is what you asked for).
-`Stats`/`Attributes` work identically.
-
-```python
-# create a stat — returns the Stat object so you can chain
-health = hero.stats.set("health", 20)     # health == "health=20"
-
-# then operate on the object:
-health.set(3)        # set value outright   -> health=3
-health.add(5)        # shift by +5          -> health=8
-health.add(-2)       # shift by -2          -> health=6
-health.modify(value=99)            # edit any field by name
-health.modify(name="hp", value=10) # rename + set in one call
-
-# you don't have to keep the handle around — grab it by name any time:
-hero.stats["health"].add(-3)       # the Stat object
-hero.stats.get("health")           # just the number (or a default): 16
-hero.stats.modify("health", value=50)   # edit by name via the container
-hero.stats.remove("health")        # delete it
+```
+reaction:[stat.health(-5), poison, stat.mana(-2)]
 ```
 
-Attributes are the same: `hero.attributes.set("max_health", 20)`, then `.add`, `.modify`, etc.
+- **delta** = `path(amount)` → e.g. `stat.health(-5)`, `inventory.rope.count(-1)`. Negative = subtract. (Containers are singular: `stat`, `talent`, `effect`, `ability`, `quest`, `nbt` — `attribute`/`atr` still read the stat namespace from the merge.)
+- **function** = a bare name → runs that `/function`'s lines.
 
-> **Renaming auto-reindexes:** `health.modify(name="hp")` (or `health.name = "hp"`) moves the
-> entry so `stats["hp"]` works immediately and `stats["health"]` is gone. Characters renamed via
-> `/character modify hero.name(...)` re-key in the shell's `WORLD` the same way.
+### Where reactions/hooks live
 
-### Items
+| Element | Field | Fires when | `@s` (subject) | `@o` (origin/cause) |
+|---|---|---|---|---|
+| Talent | `proc` + `reaction` | its proc signals match | the talent owner | the owner |
+| Ability | `on_hit` | `/ability cast` lands | the target | the caster |
+| Item | `on_equip` / `on_unequip` | equipped / removed | the wearer | (inherited) |
+| Effect | `proc` + `reaction` | on its firing turns | the afflicted | (inherited) |
 
-Three core fields + a free-form NBT bag for everything else.
+Inside a called function, `@s` = who the effect acts on, `@o` = who caused it. Both persist through nested function calls.
 
-```python
-sword = Item("Ira' kurri", "A humming blade.", quantity=1,
-             type_id="iron_sword", prefix="sharp", origin="Dungeon Chest")
+### `/function`
 
-sword.modify(name="Ira' Kurri", count=7, prefix="vicious")   # edit any field; count -> quantity
-print(sword)
-# iron_sword{name:"Ira' Kurri",description:"A humming blade.",count:7,prefix:"vicious",origin:"Dungeon Chest"}
+```
+/function edit <name>          open the line editor (create or edit)
+/function run <name> [sel]     run it; @s = each target. No selector → inherits caller's @s/@o
+/function list | show <name> | remove <name>
 ```
 
-Apostrophes/quotes in names are fine — internally it's a plain string; escaping only happens
-when it's printed as NBT text.
+**Editor** (`name:N>` prompt): type command lines (TAB completes them). Meta-commands:
 
-```python
-hero.inventory.add(sword)
-hero.inventory.get("Ira' kurri")   # first match (or None)
-hero.inventory.find("Potion")      # all matches
-hero.inventory.remove(sword)
-list(hero.inventory)               # everything
+```
+:list   :del N   :ins N <command>   :move A B   :swap A B   :done   :cancel   :help
 ```
 
-### Equipment
-
-Define slots first; capacity can be a number **or** depend on a stat.
-
-```python
-hero.equipment.define_slot("helmet", capacity=1)
-hero.equipment.define_slot("ring", capacity=lambda owner: owner.stats.get("fingers", 0))
-hero.stats.set("fingers", 10)
-hero.equipment.capacity_of("ring")        # -> 10
-
-hero.equipment.equip("ring", Item("Band of Sparks", type_id="copper_ring"))
-hero.equipment.unequip("ring")            # last one, or pass the item
-hero.equipment.equipped()                 # {'ring': [...]}  (non-empty slots only)
-```
-
-### Talents and Abilities
-
-```python
-hero.talents.add(Talent("chainsaw", level=1, description="fell trees instantly", proc="chopped_tree"))
-hero.talents.get("chainsaw")
-hero.talents.by_proc("chopped_tree")      # talents triggered by an event
-
-fb = hero.abilities.add(Ability("firebolt", level=1, cooldown="2t", cost="200mana"))
-hero.abilities.get("firebolt")
-fb.cost.amount, fb.cost.unit              # -> (200, "mana")
-fb.modify(cooldown="3t", cost="1hp")      # re-parses units
-```
-
-All elements (Item/Talent/Ability/Attribute/Stat) have `.modify(**fields)` for editing
-any field; Stat/Attribute additionally have `.set(value)` / `.add(amount)`.
+**Returns:** `True` if it ran.
 
 ---
 
-## C) Autofill (the engine behind TAB)
+## Selectors
 
-The vocabulary lives **on the classes**: each has `GENERIC_NBT` (common keys) + `NBT`
-(type-specific). When you create a specific item type, register it and TAB knows it:
+`<selector>` = who a command targets.
 
-```python
-from autofill import autofill
+| Token | Means |
+|---|---|
+| `name` | that character |
+| `@a` / `@!a` | all players / all NPCs |
+| `@m` | all mobs |
+| `@` | every entity |
+| `@p` / `@!p` | previous selection / everyone but it |
+| `@s` / `@!s` | the subject of the running effect / everyone but it |
+| `@o` / `@!o` | the origin/cause of the running effect / everyone but it |
+| `[a,b,c]` | a list — runs once per entry |
 
-class IronSword(Item):
-    type_id = "iron_sword"
-    NBT = ["sharpness", "reach"]          # merged with inherited GENERIC_NBT
+Group selectors take an NBT filter: `@m[species="wolf"]`, `@a[class="rogue"]`.
 
-autofill.register_class(IronSword)
-autofill.register_command("teleport")     # add a command name
+---
 
-# direct calls (TAB uses these under the hood):
-autofill.complete_command("/gi")          # -> "/give"
-autofill.suggest_command("/a")            # -> ["/ability", "/attribute"]
-autofill.complete_nbt_key("sh", "iron_sword")  # -> "sharpness"
+## Substitution: `$()` and dice
+
+Outside quotes, `$(...)` is replaced before the command runs; inside `"quotes"` everything is literal.
+
+```
+$(@s)               → the subject's name        $(@o) → the cause's name
+$(@s.stat.health)   → a value at that path
+$(hp)               → a stored variable (see /data)
+dN                  → a die roll (bare, e.g. d20) # returns random number 1 through 20 inclusive
 ```
 
 ---
 
-## Not built yet (on purpose — your call later)
+## /random
 
-- The `/give`, `/summon`, `/effect`, `/execute`, `/kill`, `/talent`, `/ability`,
-  `/attribute` handlers (names are reserved; only `/character` is wired).
-- NBT **default values** + naming conventions per item type.
-- Parsing NBT **text back into objects** (objects → text works today).
-- The **proc event tree**.
-- Loading the **reference CSVs** into autofill / validation.
-- Equip-time **temporary buffs**.
-- **Saving/loading** to disk (the shell's world is in-memory per session).
-- The `/ai` assistant.
+```
+/random range <min>..<max>     one integer in [min,max] inclusive (min first)
+```
+
+Typing a number then TAB inserts `..`. Bare `<n>` = `1..n`; reversed bounds tolerated.
+**Returns:** one int — captures cleanly (unlike `dN`).
+
+```
+/execute store result var $(x)->int run random range 1..20
+/data result $(x)->int run random range 1..20
+```
+
+---
+
+## /uuid
+
+Every initiated entity (character, item, mob, NPC, quest, structure, talent/ability/effect) automatically gets a **session-unique id**: a 2-letter type code + `-` + 4 base62 chars — e.g. `it-aB39`. Type codes: `pl` player · `np` NPC · `mb` mob · `it` item · `qs` quest · `st` structure · `tl` talent · `ab` ability · `ef` effect. Ids are unique within a session (not across sessions) and persist through save/load — so a UI can reference an entity by uuid instead of by nbt.
+
+```
+/uuid get <selector>             show the uuid(s) of matched character(s)
+/uuid lookup <uuid>              what entity holds that uuid
+/uuid set <old-uuid> <new-uuid>  change a uuid; if the new one is taken: swap / regen the other / cancel
+/uuid list [type]                counts per type, or every uuid of a 2-letter type (e.g. /uuid list it)
+```
+
+`uuid` is managed automatically — it can't be set via `/modify` and survives a reset; use `/uuid set` to change one.
+
+---
+
+## /character
+
+```
+/character new <name>{nbt} [true]      create (trailing true = NPC)
+/character modify <selector> <set|add|reset> {nbt}     edit NBT
+/character get <selector> <field>             read a field
+/character show <selector> | list | remove <selector>
+```
+
+NBT is free-form: handled keys (`inventory_slots`) route to structure; any other key is just stored.
+
+---
+
+## /stat
+
+A stat is BASE (a number) or DERIVED (owns a `/formula`). New characters seed every stat in `stats.csv` at 0.
+
+```
+/stat new <selector> <name> [value]              create/set (or {a:1,b:2} bulk)
+/stat modify <selector> <name> <set|add|reset> [value]    set / add (behaves as operator/append/concat) / reset→0
+/stat get <selector> <name> | list <selector> | remove <selector> <name>
+```
+
+The op word sits on either side: `/stat modify hero health set 3` == `... set health 3`.
+**`/stat get` returns** the number (capturable).
+
+---
+
+## /formula
+
+```
+/formula new|modify <selector> <stat> = <expr>    set a derived-stat formula ('=' optional)
+/formula remove <selector> <stat> | list <selector> | recompute <selector>
+```
+
+Expr refs `stat.X` (`atr.X` alias). Ops `+ - * / ^`, postfix `!`. Functions: `IF(c,a,b)`, `LET(n,v,body)`, `DELTA(ref)`, `MIN MAX ABS FLOOR CEIL ROUND SQRT CLAMP EXP FACT`.
+
+---
+
+## /item
+
+```
+/item new <selector> <item>{nbt} [count]     create → inventory (identical stacks merge)
+/item remove <selector> <item> [count]
+/item list <selector>
+/item modify <selector> <item> <set|add|reset> <field> <value>     (or set {nbt})
+/item equip <selector> <item> [slot]          weapons go to main/off hand
+/item unequip <selector> <item-or-slot>
+/item loot <table> <selector>                 dummy for now
+```
+
+Item NBT includes `equippable`, `wield:main|off|both`, `stats:{...}` (per-item stats), `on_equip`, `on_unequip`, `talents`. Pick a duplicate by `[index]`, `type[N]`, or `type{nbt}`.
+
+---
+
+## /attack
+
+```
+/attack <atk> <tgt>                      use equipped hands (main+off)
+/attack <atk> <tgt> with <wpn>[+<wpn2>]  wield inventory item(s) for this hit
+/attack <atk> <tgt> {pierce:5,slash:3}   explicit per-type raw damage
+/attack <atk> <tgt> <number>             use <number> as effective attack
+/attack <atk> list                       show wieldables
+```
+
+Damage runs through `combat.csv` + `combat_rules.csv` vs the target's defenses, subtracts from health; a lethal hit triggers `execution_check`.
+
+---
+
+## /move
+
+```
+/move <selector> <x> <y>     step to a cell, gated by the mover's `speed` (Chebyshev; diagonals = 1)
+```
+
+First placement is free. GM teleport with no speed check: `/map pos <player> <x> <y>`.
+
+---
+
+## /proc
+
+```
+/proc enable  <selector> a,b,c     turn signals ON (sticky), fire matching talents
+/proc pulse   <selector> a,b,c     ON → fire → revert (momentary)
+/proc disable <selector> a,b,c     turn signals OFF
+/proc query   <selector>           show active signals
+```
+
+A signal may carry a bool: `is_poisoned:true`, `scared:false`, or bare (`=true`).
+
+### proc conditions (on a talent/effect)
+
+```
+proc:[{in_combat:true,end_of_turn:true}]   AND within braces  → both must hold
+proc:[{burning:true},{frozen:true}]        OR across braces   → either fires
+```
+
+Each condition must be `name:true` / `name:false` (a bare name is rejected).
+
+---
+
+## /talent · /effect · /ability
+
+```
+/talent  new <selector> <name>{proc:[...],reaction:[...]}
+/effect  new <selector> <name>{duration:N,step:[...],proc:[...],reaction:[...]}
+/ability new <selector> <name>{cooldown:N,cost:[...],on_hit:[...]}
+<cmd> list <selector> | modify <selector> <name> ... | remove <selector> <name>
+/ability cast <caster> <ability> [<target>]     pay cost + cooldown; on_hit hits target (default: self)
+```
+
+- **cost** = a list of deltas spent on cast: `cost:[stat.mana(20),stat.health(1)]`. Cast lists every blocking reason at once.
+- **cooldown** = `current/total` turns. `cooldown:7` starts ready (`0/7`); casting sets `7/7`; `/turn next` ticks it down.
+- **reaction / on_hit** = the reaction list (see top section).
+
+---
+
+## /quest
+
+Character-held quests. `reward` is a Reaction (deltas and/or function names), run with `@s` = the owner.
+
+```
+/quest new <selector> <quest>{nbt} [turns_to_expire]   give it; pulses quest_obtained
+/quest complete <selector> <quest>     run reward + pulse quest_complete, then drop it
+/quest modify <selector> <quest> <set|add|reset> <field> [{nbt}|value]
+/quest delete <selector> <quest> [true]   drop it; true also pulses quest_failed (no reward)
+/quest list <selector>
+```
+
+- **`{reward:[...]}`** — e.g. `reward:[stat.gold(100), grant_sword]`. Runs on `/quest complete`.
+- **`[turns_to_expire]`** — counts down on the owner's turns; at 0 the quest auto-fails (pulses `quest_failed`). Omit for no expiry. Also settable as `expiration:` in the nbt.
+- Procs fired: `quest_obtained` (new), `quest_complete` (complete), `quest_failed` (expiry or `delete ... true`) — talents can react to these.
+
+---
+
+## /structure
+
+Things that occupy one or more map cells (kingdoms, taverns, dungeons). Not character-owned — they live in the map (saved to disk). **Not unique:** many can share a name; the `{nbt}` narrows, and a numbered menu disambiguates when several match.
+
+```
+/structure new <structure>{nbt} [<x,y> <x,y> ...]   place it spanning those cells
+/structure delete <structure>{nbt}          remove (menu if several match)
+/structure modify <structure>{nbt} <set|add|reset> <field> [{nbt}|value]
+/structure list
+```
+
+- **Multi-cell:** the structure comes first, then any number of `x,y` cells — `/structure new kingdom{ruler:"Mara"} 1,2 2,2 3,2`. `pos` is stored as a list of cells (`pos:[[1,2],[2,2],[3,2]]`).
+- Cells can instead live in the nbt: `/structure new fort{pos:[[7,7],[7,8]]}` (leave the trailing cells off). Positional cells override an nbt `pos`.
+- Grow/shrink later: `/structure modify kingdom add pos 4,2` (annex a cell) or `set {pos:[[1,2],[2,2]]}` (replace the whole list).
+- Target by name + nbt **globally** (no x,y needed): `/structure delete kingdom{ruler:"Bob"}`. An explicit `name:` in the nbt overrides the `<structure>` token as the name.
+
+---
+
+## /turn
+
+```
+/turn                  whose turn + the world turn
+/turn next             end turn → next player (world turn ticks on wrap)
+/turn next cycle       one turn for every player
+/turn next <selector>       advance just that player
+/turn set <n> | add <n>     move the WORLD turn (no player ticking)
+```
+
+Each passing turn ticks every ability cooldown and effect duration.
+
+---
+
+## /data · /execute (capture & control)
+
+```
+/data result  $(name) run <command>     store the command's return value
+/data success $(name) run <command>     store 1 if it worked else 0
+/data set <name> <value> | /data list
+```
+
+```
+/execute [as <selector>] [if|unless <l> <operator> <r>] [store result|success <target>] run <command>
+  as <selector>                  run AS it, so @s = it
+  if/unless <l> <operator> <r>    <operator> is > < >= <= = != ; operands are paths or literals
+  store ... var $(name)->[int|float|str|list|bool]    capture into a variable no `->` assumes data type
+  store ... entity <selector> <path>                        capture into an entity field
+```
+
+`$(name)->TYPE` casts the captured value. Examples:
+
+```
+/execute as noael store result var $(hp)->float run stat get @s health
+/data result $(x)->int run random range 1..20
+```
+
+---
+
+## /tellraw
+
+```
+/tellraw <text>     print formatted text. \n \t escapes; &-codes (&c red, &l bold, &r reset)
+```
+
+Use it inside a reaction/event/function: `/tellraw $(@s) was hit by $(@o)`.
+
+---
+
+## /map · /calendar · /event · /summon · /session · /kill
+
+```
+/map view [<player>] [x y] | pos <player> <x> <y> | get <x> <y> | set <x> <y> <biome>|{nbt}
+        | new <x> <y> [biome] | recommend <x> <y>
+/calendar [show] | show at <turn> | add|set <time|day|month|year> <v> | event add <when> <text>|list|clear
+/event list|clear [category] | queue <cat> <event...> <N> [at <x> <y>] | force <cat> <event...> [at <x> <y>]
+/summon <species> [count <n>] [at <x> <y>] {nbt}      mobs; handles are <species>#N
+/session save [name] | load <id|name> | get | id | history | list   (id = 4-digit, also the UI port)
+/kill <selector> [true]      true = remove entirely; default = health 0 + pulse 'died'
+```
+
+---
+
+## Python API (containers.py)
+
+`containers.py` defines classes and creates nothing on import. The command shell is the intended interface; the API mirrors it (`Player`, `Item`, `Stat`, `Talent`, `Ability`, `Effect`, `Reaction`, `Proc`). Stat/value objects carry `.set()` / `.add()` / `.modify()`; containers carry `.add()` / `.get()` / `.remove()`.

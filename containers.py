@@ -172,6 +172,12 @@ def _split_pairs(body):
     return pairs
 
 
+def _unquote_key(key):
+    """An nbt/dict key with optional surrounding double-quotes stripped: '"ring"' -> 'ring'."""
+    key = key.strip()
+    return key[1:-1] if len(key) >= 2 and key[0] == '"' and key[-1] == '"' else key
+
+
 def _parse_nbt_value(text):
     """Turn one NBT value token into a Python value (str/int/float/bool/None)."""
     text = text.strip()
@@ -189,7 +195,7 @@ def _parse_nbt_value(text):
         for pair in _split_pairs(text[1:-1].strip()):
             key, sep, val = pair.partition(":")
             if sep:
-                result[key.strip()] = _parse_nbt_value(val)
+                result[_unquote_key(key)] = _parse_nbt_value(val)
         return result
     low = text.lower()
     if low == "none":
@@ -231,7 +237,7 @@ def parse_item_text(text):
             key, sep, val = pair.partition(":")
             if not sep:
                 raise ValueError(f"NBT entry '{pair.strip()}' is missing ':'")
-            nbt[key.strip()] = _parse_nbt_value(val)
+            nbt[_unquote_key(key)] = _parse_nbt_value(val)
     return type_id, nbt, rest.strip()
 
 
@@ -413,11 +419,16 @@ class Reaction:
             return cls([("delta", p, a) for p, a in value.entries])
         if value is None or value == "":
             return cls([])
-        text = str(value).strip()
-        if text.startswith("[") and text.endswith("]"):
-            text = text[1:-1]
+        # the nbt parser may hand us a native list ([poison_func] -> ['poison_func']); else split text
+        if isinstance(value, list):
+            chunks = [str(c) for c in value]
+        else:
+            text = str(value).strip()
+            if text.startswith("[") and text.endswith("]"):
+                text = text[1:-1]
+            chunks = _split_pairs(text)
         actions = []
-        for chunk in _split_pairs(text):
+        for chunk in chunks:
             chunk = chunk.strip()
             if not chunk:
                 continue
@@ -430,7 +441,7 @@ class Reaction:
                 name = name[len("/function"):].strip()
             elif name.startswith("/"):
                 name = name[1:].strip()
-            if re.fullmatch(r"[\w:.\-]+", name):
+            if re.fullmatch(r"[\w:.\-/]+", name):  # allow '/' for path-style fn names (ability:poly/toast)
                 actions.append(("func", name))
             else:
                 _warn_parse(f"reaction: ignored '{chunk}' — use path(amount) or a function name")
@@ -684,32 +695,32 @@ class Formula:
         return self.text
 
 
-class Formulas:
+class FormulaSet:
     """A player's derived-stat formulas: stat name -> Formula."""
     def __init__(self):
-        self.formulas = {}
+        self.formula = {}
 
     def __len__(self):
-        return len(self.formulas)
+        return len(self.formula)
 
     def __iter__(self):
-        return iter(self.formulas)
+        return iter(self.formula)
 
     def __contains__(self, name):
-        return name in self.formulas
+        return name in self.formula
 
     def __repr__(self):
-        return f"Formulas({list(self.formulas)})"
+        return f"FormulaSet({list(self.formula)})"
 
     def add(self, name, expr):
-        self.formulas[name] = expr if isinstance(expr, Formula) else Formula(expr)
-        return self.formulas[name]
+        self.formula[name] = expr if isinstance(expr, Formula) else Formula(expr)
+        return self.formula[name]
 
     def get(self, name):
-        return self.formulas.get(name)
+        return self.formula.get(name)
 
     def remove(self, name):
-        return self.formulas.pop(name, None)
+        return self.formula.pop(name, None)
 
 
 # The generic derived-stat formulas every character starts with — loaded from formulas.csv so
@@ -777,7 +788,9 @@ class Item:
     # inherited by every specific item). NBT = non-generic keys for a subclass.
     # Both are editable; truly dynamic keys typed at runtime aren't listed here.
     GENERIC_NBT = ["name", "description", "count", "prefix", "suffix", "origin"]
-    NBT = []
+    # NBT = completable-but-not-auto-filled keys: the equipment/weapon mechanics live here so they
+    # show up in TAB (e.g. /item modify hero sword set <TAB>) without bloating every plain item.
+    NBT = ["equippable", "wield", "stats", "on_equip", "on_unequip", "talents"]
 
     def __init__(self, name="", description="", quantity=1, type_id=None, **nbt):
         self.name = name
@@ -850,9 +863,10 @@ class Item:
         return Item(name=self.name, description=self.description, quantity=self.quantity, type_id=self.type_id, **dict(self.nbt))
 
     def stack_key(self):
-        """Identity for stacking: everything EXCEPT quantity. Two items with the same
-        stack_key are 'identical' and merge into one stack."""
-        return (self.type_id, self.name, self.description, tuple(sorted(self.nbt.items())))
+        """Identity for stacking: everything EXCEPT quantity (and the per-instance uuid — fungible
+        copies must still merge). Two items with the same stack_key are 'identical' and merge."""
+        nbt = tuple(sorted((k, v) for k, v in self.nbt.items() if k != "uuid"))
+        return (self.type_id, self.name, self.description, nbt)
 
     def __repr__(self):
         return f"{self.type_id}{_nbt_string(self._all_nbt())}"
@@ -1036,6 +1050,167 @@ class Effect:
         return f"{self.name}{_nbt_string(fields)}"
 
 
+def _as_turns(value):
+    """Coerce a turn count to int (or None for no-expiry). Accepts ints, numeric strings, ''/'none'."""
+    if value is None or (isinstance(value, str) and value.strip().lower() in ("", "none")):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
+
+class Quest:
+    """A character-held quest:
+      description  - free text
+      reward       - a Reaction (class-path deltas AND/OR /function names) run on completion,
+                     with @s = the quest owner. Same syntax as talent.reaction / ability.on_hit.
+      expiration   - turns until it auto-fails (counts down on the owner's turns); None = never.
+    The command layer pulses 'quest_obtained' on creation, 'quest_complete' on /quest complete,
+    and 'quest_failed' on expiry (or /quest delete <quest> true)."""
+    type_id = "quest"
+    GENERIC_NBT = ["name", "description", "reward", "expiration"]
+    NBT = []
+    CORE = ("name",)
+    DEFAULTS = {"description": "", "reward": None, "expiration": None}
+    _STRUCTURED = {"name", "description", "reward", "expiration"}
+
+    def __init__(self, name="", description="", reward=None, expiration=None, **nbt):
+        self.name = name
+        self.description = description
+        self.reward = Reaction.parse(reward) if reward is not None else None
+        self.expiration = _as_turns(expiration)
+        self.nbt = dict(nbt)
+
+    @classmethod
+    def from_nbt(cls, ident, nbt):
+        nbt = dict(nbt)
+        name = nbt.pop("name", ident)  # an explicit name: in the nbt overrides the ident token
+        return _fill_generic_nbt(cls(name=name, **nbt))
+
+    def field_value(self, key):
+        if key in ("name", "description", "reward", "expiration"):
+            return getattr(self, key)
+        return self.nbt.get(key)
+
+    def modify(self, **fields):
+        for key, val in fields.items():
+            if key == "reward":
+                self.reward = Reaction.parse(val) if val is not None else None
+            elif key == "expiration":
+                self.expiration = _as_turns(val)
+            elif key in ("name", "description"):
+                setattr(self, key, val)
+            else:
+                self.nbt[key] = val
+        return self
+
+    def reset(self, *keys):
+        return _reset_fields(self, self.DEFAULTS, keys)
+
+    def __repr__(self):
+        fields = {"description": self.description, "reward": self.reward, "expiration": self.expiration}
+        fields.update(self.nbt)
+        return f"{self.name}{_nbt_string(fields)}"
+
+
+def _one_cell(c):
+    """A single [x,y] cell from a [x,y]/(x,y) pair or an 'x,y' string; else None."""
+    if isinstance(c, (list, tuple)) and len(c) >= 2:
+        try:
+            return [int(c[0]), int(c[1])]
+        except (TypeError, ValueError):
+            return None
+    if isinstance(c, str):
+        a, sep, b = c.partition(",")
+        if sep and a.strip().lstrip("-").isdigit() and b.strip().lstrip("-").isdigit():
+            return [int(a), int(b)]
+    return None
+
+
+def _as_cells(value):
+    """Normalize a structure position into a list of [x,y] int cells. Accepts a list of pairs
+    ([[1,2],[2,2]]), a bare pair ([1,2]), a flat list ([1,2,2,2]), or strings ('1,2', '1,2 2,2',
+    '[[1,2],[2,2]]'). Anything unrecognized -> []. So pos is ALWAYS a clean list of cells."""
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        value = _parse_nbt_value(text) if text.startswith("[") else text.split()
+    if not isinstance(value, (list, tuple)):
+        return []
+    items = list(value)
+    cells = [_one_cell(c) for c in items]
+    if cells and all(c is not None for c in cells):
+        return cells
+    if len(items) % 2 == 0 and all(isinstance(n, (int, float)) and not isinstance(n, bool) for n in items):
+        return [[int(items[i]), int(items[i + 1])] for i in range(0, len(items), 2)]  # flat [x,y,x,y]
+    return [c for c in cells if c is not None]  # best effort: keep the valid cells
+
+
+class Structure:
+    """A thing that occupies one or MORE map cells (a kingdom, tavern, dungeon, ...). Not
+    character-owned; it lives in the map. `pos` is a LIST of [x,y] cells it spans (a one-cell
+    structure is just [[x,y]]). Structures are NOT unique — any number can share a name; they're
+    picked by name + nbt (a menu disambiguates)."""
+    type_id = "structure"
+    GENERIC_NBT = ["name", "description", "pos"]
+    NBT = []
+    CORE = ("name",)
+    DEFAULTS = {"description": "", "pos": None}
+    _STRUCTURED = {"name", "description", "pos"}
+
+    def __init__(self, name="", description="", pos=None, **nbt):
+        self.name = name
+        self.description = description
+        self.pos = _as_cells(pos)  # always a list of [x,y] cells
+        self.nbt = dict(nbt)
+
+    @classmethod
+    def from_nbt(cls, ident, nbt):
+        nbt = dict(nbt)
+        name = nbt.pop("name", ident)  # an explicit name: in the nbt overrides the ident token
+        return _fill_generic_nbt(cls(name=name, **nbt))
+
+    def field_value(self, key):
+        if key in ("name", "description", "pos"):
+            return getattr(self, key)
+        return self.nbt.get(key)
+
+    def covers(self, x, y):
+        """True if this structure occupies cell (x, y)."""
+        return [int(x), int(y)] in self.pos
+
+    def modify(self, **fields):
+        for key, val in fields.items():
+            if key == "pos":
+                self.pos = _as_cells(val)
+            elif key in ("name", "description"):
+                setattr(self, key, val)
+            else:
+                self.nbt[key] = val
+        return self
+
+    def reset(self, *keys):
+        result = _reset_fields(self, self.DEFAULTS, keys)
+        self.pos = _as_cells(self.pos)  # keep pos a list even after a reset to None
+        return result
+
+    def as_dict(self):
+        """JSON-safe form for persisting in the map file."""
+        data = {"name": self.name, "description": self.description, "pos": self.pos}
+        data.update(self.nbt)
+        return data
+
+    def __repr__(self):
+        fields = {"description": self.description, "pos": self.pos}
+        fields.update(self.nbt)
+        return f"{self.name}{_nbt_string(fields)}"
+
+
 def _modify_fields(obj, core, fields):
     """Apply field=value edits: known `core` names set attributes, the rest go to nbt."""
     for key, val in fields.items():
@@ -1061,13 +1236,19 @@ def _fill_generic_nbt(obj):
 
 def _reset_fields(obj, defaults, keys):
     """Reset: core keys (in `defaults`) go to their default; other keys are removed from nbt.
-    No keys = reset all core defaults and clear nbt."""
+    No keys = reset all core defaults and clear nbt. The 'uuid' nbt key is identity, not data, so
+    it always survives a reset (it's never a reset target)."""
     if not keys:
+        kept_uuid = obj.nbt.get("uuid")
         for key, default in defaults.items():
             setattr(obj, key, default)
         obj.nbt.clear()
+        if kept_uuid:
+            obj.nbt["uuid"] = kept_uuid
         return obj
     for key in keys:
+        if key == "uuid":
+            continue  # not resettable
         if key in defaults:
             setattr(obj, key, defaults[key])
         else:
@@ -1169,7 +1350,7 @@ class Equipment:
     """Slotted worn gear: slot name -> list of Items.
 
     A slot capacity may be a fixed int or a callable(owner) -> int, so capacities
-    can depend on Stats (ring-slot capacity = owner.stats.get('fingers')). `owner`
+    can depend on Stats (ring-slot capacity = owner.stat.get('fingers')). `owner`
     is the Player, set by Player so capacity callables can read live stats.
     """
     def __init__(self, owner=None):
@@ -1213,121 +1394,147 @@ class Equipment:
         return f"Equipment({ {s: v for s, v in self.slots.items() if v} })"
 
 
-class Talents:
+class TalentSet:
     """Holds a player's Talents; supports lookup by the proc that triggers them."""
     def __init__(self):
-        self.talents = []
+        self.talent = []
 
     def __len__(self):
-        return len(self.talents)
+        return len(self.talent)
 
     def __iter__(self):
-        return iter(self.talents)
+        return iter(self.talent)
 
     def __repr__(self):
-        return f"Talents({self.talents})"
+        return f"TalentSet({self.talent})"
 
     def add(self, talent):
-        self.talents.append(talent)
+        self.talent.append(talent)
         return talent
 
     def remove(self, talent):
-        self.talents.remove(talent)
+        self.talent.remove(talent)
         return talent
 
     def get(self, name):
-        return next((t for t in self.talents if t.name == name), None)
+        return next((t for t in self.talent if t.name == name), None)
 
     def by_proc(self, proc):
-        return [t for t in self.talents if t.proc == proc]
+        return [t for t in self.talent if t.proc == proc]
 
 
-class Abilities:
+class AbilitySet:
     """Holds a player's castable Abilities."""
     def __init__(self):
-        self.abilities = []
+        self.ability = []
 
     def __len__(self):
-        return len(self.abilities)
+        return len(self.ability)
 
     def __iter__(self):
-        return iter(self.abilities)
+        return iter(self.ability)
 
     def __repr__(self):
-        return f"Abilities({self.abilities})"
+        return f"AbilitySet({self.ability})"
 
     def add(self, ability):
-        self.abilities.append(ability)
+        self.ability.append(ability)
         return ability
 
     def remove(self, ability):
-        self.abilities.remove(ability)
+        self.ability.remove(ability)
         return ability
 
     def get(self, name):
-        return next((a for a in self.abilities if a.name == name), None)
+        return next((a for a in self.ability if a.name == name), None)
 
 
-class Effects:
+class EffectSet:
     """Holds a player's status Effects (buffs/debuffs)."""
     def __init__(self):
-        self.effects = []
+        self.effect = []
 
     def __len__(self):
-        return len(self.effects)
+        return len(self.effect)
 
     def __iter__(self):
-        return iter(self.effects)
+        return iter(self.effect)
 
     def __repr__(self):
-        return f"Effects({self.effects})"
+        return f"EffectSet({self.effect})"
 
     def add(self, effect):
-        self.effects.append(effect)
+        self.effect.append(effect)
         return effect
 
     def remove(self, effect):
-        self.effects.remove(effect)
+        self.effect.remove(effect)
         return effect
 
     def get(self, name):
-        return next((e for e in self.effects if e.name == name), None)
+        return next((e for e in self.effect if e.name == name), None)
 
 
-class Stats:
-    """Maps stat name -> Stat (the one merged namespace; see stats.csv for the generic set)."""
+class QuestSet:
+    """Holds a character's active Quests."""
     def __init__(self):
-        self.stats = {}
+        self.quest = []
 
     def __len__(self):
-        return len(self.stats)
+        return len(self.quest)
 
     def __iter__(self):
-        return iter(self.stats.values())
-
-    def __getitem__(self, name):
-        return self.stats[name]
-
-    def __contains__(self, name):
-        return name in self.stats
+        return iter(self.quest)
 
     def __repr__(self):
-        return f"Stats({list(self.stats.values())})"
+        return f"QuestSet({self.quest})"
+
+    def add(self, quest):
+        self.quest.append(quest)
+        return quest
+
+    def remove(self, quest):
+        self.quest.remove(quest)
+        return quest
+
+    def get(self, name):
+        return next((q for q in self.quest if q.name == name), None)
+
+
+class StatSet:
+    """Maps stat name -> Stat (the one merged namespace; see stats.csv for the generic set)."""
+    def __init__(self):
+        self.stat = {}
+
+    def __len__(self):
+        return len(self.stat)
+
+    def __iter__(self):
+        return iter(self.stat.values())
+
+    def __getitem__(self, name):
+        return self.stat[name]
+
+    def __contains__(self, name):
+        return name in self.stat
+
+    def __repr__(self):
+        return f"StatSet({list(self.stat.values())})"
 
     def add(self, stat):
         stat._container = self
-        self.stats[stat.name] = stat
+        self.stat[stat.name] = stat
         return stat
 
     def set(self, name, value):
-        if name in self.stats:
-            self.stats[name].value = value
+        if name in self.stat:
+            self.stat[name].value = value
         else:
             self.add(Stat(name, value))
-        return self.stats[name]
+        return self.stat[name]
 
     def get(self, name, default=None):
-        stat = self.stats.get(name)
+        stat = self.stat.get(name)
         return stat.value if stat is not None else default
 
     def modify(self, **fields):
@@ -1342,7 +1549,7 @@ class Stats:
     def reset(self, *names):
         """Remove the named stats; no names = remove all."""
         if not names:
-            self.stats.clear()
+            self.stat.clear()
         else:
             for name in names:
                 self.remove(name)
@@ -1350,12 +1557,12 @@ class Stats:
 
     def _rekey(self, old, new, obj):
         """Move an entry when its object is renamed, so the key tracks .name."""
-        if old in self.stats and self.stats[old] is obj:
-            del self.stats[old]
-        self.stats[new] = obj
+        if old in self.stat and self.stat[old] is obj:
+            del self.stat[old]
+        self.stat[new] = obj
 
     def remove(self, name):
-        return self.stats.pop(name, None)
+        return self.stat.pop(name, None)
 
 
 # --- Player (ties every container together) ----------------------------------
@@ -1382,35 +1589,52 @@ class Player:
         self.name = name
         self.inventory = Inventory(slots=inventory_slots)
         self.equipment = Equipment(owner=self)
-        self.talents = Talents()
-        self.abilities = Abilities()
-        self.effects = Effects()
-        self.stats = Stats()
+        self.talent = TalentSet()
+        self.ability = AbilitySet()
+        self.effect = EffectSet()
+        self.quest = QuestSet()
+        self.stat = StatSet()
         for stat_name in STAT_NAMES:        # seed every generic stat (from stats.csv) at 0 on creation
-            self.stats.set(stat_name, 0)
-        self.formulas = Formulas()  # derived-stat definitions (start from the generic set)
+            self.stat.set(stat_name, 0)
+        self.formula = FormulaSet()  # derived-stat definitions (start from the generic set)
         for stat_name, expr in DEFAULT_FORMULAS.items():
-            self.formulas.add(stat_name, expr)
+            self.formula.add(stat_name, expr)
         self.nbt = {}
         self.proc_state = {}  # active proc signals (name -> bool), set by /proc
         self._last_seen = {}  # ref -> value at last recompute, for DELTA(...) in formulas
+
+    def _equipped_stat_bonus(self):
+        """Sum the `stats` of equipped NON-WEAPON gear (rings/armor/...). Weapon hands
+        (main_hand/off_hand) are excluded — they contribute only through /attack, so they don't
+        leak affinities onto general stats. Folded into base stats live by recompute (auto-reversible
+        on unequip — nothing is baked into the stored stat)."""
+        bonus = {}
+        for slot, items in self.equipment.equipped().items():
+            if slot in ("main_hand", "off_hand"):
+                continue
+            for item in items:
+                for key, value in (item.nbt.get("stats") or {}).items():
+                    bonus[key] = bonus.get(key, 0) + value
+        return bonus
 
     def recompute(self):
         """Evaluate every formula and write the result into stats. Formulas read other stats
         (stat.X — atr.X is accepted as an alias); cross-stat refs resolve on demand (cycle-guarded),
         so magia_pool is computed before the school stats that use it. A formula that references
         ITSELF (e.g. health = MIN(health, max_health)) reads its current value, so it accumulates
-        / clamps. DELTA(ref) returns ref's change since the last recompute (recorded once per pass)."""
+        / clamps. DELTA(ref) returns ref's change since the last recompute (recorded once per pass).
+        Equipped non-weapon gear's stats fold into base stats here (live, never baked in)."""
         cache, pending = {}, {}
+        bonus = self._equipped_stat_bonus()
 
         def get_stat(name):
             if name in cache:
                 return cache[name]
-            formula = self.formulas.get(name)
+            formula = self.formula.get(name)
             if formula is None:
-                value = self.stats.get(name)
-                return value if value is not None else 0
-            current = self.stats.get(name)  # self-reference resolves to the current value
+                value = self.stat.get(name)
+                return (value if value is not None else 0) + bonus.get(name, 0)  # + worn-gear bonus
+            current = self.stat.get(name)  # self-reference resolves to the current value
             cache[name] = current if current is not None else 0
             cache[name] = formula.evaluate(get_stat, get_stat, delta)
             return cache[name]
@@ -1420,8 +1644,8 @@ class Player:
             pending[ref] = current
             return change
 
-        for stat_name in list(self.formulas):
-            self.stats.set(stat_name, get_stat(stat_name))
+        for stat_name in list(self.formula):
+            self.stat.set(stat_name, get_stat(stat_name))
         self._last_seen.update(pending)  # advance the snapshot once, after the whole pass
         return self
 
@@ -1451,9 +1675,12 @@ class Player:
         """Reset handled keys to their default; remove dynamic nbt keys. No keys = reset all."""
         handled = self._handled()
         if not keys:
+            kept_uuid = self.nbt.get("uuid")  # uuid is identity, not data — survives a full reset
             for getter, setter, default in handled.values():
                 setter(default)
             self.nbt.clear()
+            if kept_uuid:
+                self.nbt["uuid"] = kept_uuid
             return self
         for key in keys:
             if key in handled:
@@ -1463,9 +1690,9 @@ class Player:
         return self
 
     def __repr__(self):
-        base = (f"Player({self.name!r}: {len(self.inventory)} items, {len(self.talents)} talents, "
-                f"{len(self.abilities)} abilities, {len(self.effects)} effects, "
-                f"{len(self.stats)} stats")
+        base = (f"Player({self.name!r}: {len(self.inventory)} items, {len(self.talent)} talents, "
+                f"{len(self.ability)} abilities, {len(self.effect)} effects, "
+                f"{len(self.stat)} stats")
         slots = self.inventory.slots
         extra = ({"inventory_slots": slots} if slots is not None else {}) | self.nbt
         return base + (f"; {extra})" if extra else ")")
@@ -1483,4 +1710,4 @@ class Mob(Player):
     _NBT_DEFAULTS = {"mob": True, "npc": True}      # what makes it a mob NPC by default
 
     def __repr__(self):
-        return f"Mob({self.name!r}: {len(self.stats)} stats, {len(self.abilities)} abilities; {self.nbt})"
+        return f"Mob({self.name!r}: {len(self.stat)} stats, {len(self.ability)} abilities; {self.nbt})"

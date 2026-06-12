@@ -1,6 +1,6 @@
 stat,formula
-health,"MIN(stat.health + stat.health_regen * DELTA(stat.turn), stat.max_health)"
-mana,"MIN(stat.mana + stat.mana_regen * DELTA(stat.turn), stat.max_mana)"
+health,"IF(stat.max_health > 0, MIN(stat.health + stat.health_regen * DELTA(stat.turn), stat.max_health), stat.health + stat.health_regen * DELTA(stat.turn))"
+mana,"IF(stat.max_mana > 0, MIN(stat.mana + stat.mana_regen * DELTA(stat.turn), stat.max_mana), stat.mana + stat.mana_regen * DELTA(stat.turn))"
 bludgeon,"stat.attack * IF(stat.bludgeon_affinity > 1, stat.bludgeon_affinity^AFFINITY_TAX, stat.bludgeon_affinity)"
 pierce,"stat.attack * IF(stat.pierce_affinity > 1, stat.pierce_affinity^AFFINITY_TAX, stat.pierce_affinity)"
 slash,"stat.attack * IF(stat.slash_affinity > 1, stat.slash_affinity^AFFINITY_TAX, stat.slash_affinity)"

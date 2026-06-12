@@ -1,0 +1,23 @@
+{
+  "default": {
+    "eyewear": 1, "headwear": 1, "forehead": 1, "earrings": 2, "neckwear": 1, "mask": 1,
+    "helmet": 1, "pauldrons": 1, "rerebrace": 1, "chestplate": 1, "vambrace": 1, "tunic": 1,
+    "robe": 1, "gauntlets": 1, "belt": 1, "leggings": 1, "poleyn": 1, "graves": 1, "pants": 1,
+    "anklewear": 1, "misc": 2, "socks": 1, "sabatons": 1, "ring": 4, "wristwear": 2,
+    "main_hand": 1, "off_hand": 1
+  },
+  "human": {
+    "eyewear": 1, "headwear": 1, "forehead": 1, "earrings": 2, "neckwear": 4, "mask": 1,
+    "helmet": 1, "pauldrons": 1, "rerebrace": 1, "chestplate": 1, "vambrace": 1, "tunic": 1,
+    "robe": 1, "gauntlets": 1, "belt": 1, "leggings": 1, "poleyn": 1, "graves": 1, "pants": 1,
+    "anklewear": 1, "misc": 2, "socks": 1, "sabatons": 1, "ring": 10, "wristwear": 2,
+    "main_hand": 1, "off_hand": 1
+  },
+  "felanon": {
+    "eyewear": 1, "headwear": 1, "forehead": 1, "earrings": 4, "neckwear": 8, "mask": 1,
+    "helmet": 1, "pauldrons": 1, "rerebrace": 1, "chestplate": 1, "vambrace": 1, "tunic": 1,
+    "robe": 1, "gauntlets": 1, "belt": 1, "leggings": 1, "poleyn": 1, "graves": 1, "pants": 1,
+    "misc": 2, "ring": 8, "wristwear": 2,
+    "main_hand": 1, "off_hand": 1
+  }
+}

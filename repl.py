@@ -4,15 +4,15 @@ Launch it:   python3 main.py   (or)   python3 repl.py
 
 TAB completes at every position, like `cd <TAB>`:
     /char<TAB>                 -> /character
-    /character <TAB>           -> add modify show list remove get   (subcommands)
-    /character add <TAB>       -> existing character names
+    /character <TAB>           -> new modify show list remove get   (subcommands)
+    /character new <TAB>       -> existing character names
     /stat hero <TAB>           -> set add modify get list           (operations)
     /item give hero iron_sword{<TAB>   -> NBT keys for that item
 
 Reading values (two ways):
     /character get hero inventory_slots
     hero.inventory_slots                 (bare path, no slash — just prints the value)
-    hero.stats.health                    (reach into containers)
+    hero.stat.health                    (reach into containers)
 Setting a character field:
     /character modify hero.inventory_slots(3)   (or bare: hero.inventory_slots(3))
 
@@ -29,12 +29,13 @@ import copy
 import json
 import random
 import shutil
+import string
 import difflib
 try:
     import gnureadline as readline  # real GNU readline (enables ordered/tiered listing + 1-tab)
 except ImportError:
     import readline  # macOS falls back to libedit (works, but lists in its own sorted columns)
-from containers import (Player, Mob, Item, Talent, Ability, Effect, Cooldown, Cost, Proc, Reaction,
+from containers import (Player, Mob, Item, Talent, Ability, Effect, Quest, Structure, Cooldown, Cost, Proc, Reaction,
                         UnitValue, Formula, STAT_NAMES, FORMULA_CONSTANTS,
                         COMBAT_TYPES, COMBAT_RULES,
                         parse_item_text, parse_warnings, add_parse_warning, _fill_generic_nbt,
@@ -43,26 +44,77 @@ from autofill import autofill
 
 WORLD = {}  # name -> Player, for this session
 HISTORY = []  # session log: function-run lines, '---' between player turns, '===' between cycles
-SESSION = None  # name of the currently loaded/saved session (None until save/load)
 SESSION_DIR = "sessions"
+# A session is keyed by a 4-digit numeric ID that doubles as the UI's localhost port (so the URL is
+# grounded in the session). The file is sessions/<id>.json; an optional human name lives inside it.
+SESSION_PORT_MIN, SESSION_PORT_MAX = 1024, 9999  # valid unprivileged 4-digit ports
+SESSION_ID = None    # this session's id / UI port (allocated lazily at first need)
+SESSION_NAME = None  # optional friendly name for the current session
+
+
+def _saved_session_ids():
+    """The numeric ids of saved sessions (filenames like 1042.json)."""
+    if not os.path.isdir(SESSION_DIR):
+        return set()
+    return {int(f[:-5]) for f in os.listdir(SESSION_DIR) if f.endswith(".json") and f[:-5].isdigit()}
+
+
+def _port_in_use(port):
+    """True if something is already listening on localhost:port (so two live sessions don't clash)."""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.05)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _allocate_session_id():
+    """Lowest free 4-digit id from 1024 up: not a saved session, not a port currently in use."""
+    taken = _saved_session_ids()
+    for candidate in range(SESSION_PORT_MIN, SESSION_PORT_MAX + 1):
+        if candidate not in taken and not _port_in_use(candidate):
+            return candidate
+    return SESSION_PORT_MIN  # everything taken (won't happen at this scale)
+
+
+def _ensure_session_id():
+    """This session's id, allocated once at first need (REPL boot / UI launch / first save)."""
+    global SESSION_ID
+    if SESSION_ID is None:
+        SESSION_ID = _allocate_session_id()
+    return SESSION_ID
 
 # Containers a class-path (in cost/reaction) can address. Used to validate paths and to
 # autofill inside reaction:[ / cost:[ — catches typos like 'stat.health' (missing 's').
-PATH_CONTAINERS = ["stats", "inventory", "equipment", "talents", "abilities", "effects", "nbt"]
+PATH_CONTAINERS = ["stat", "inventory", "equipment", "talent", "ability", "effect", "quest", "nbt"]
+
+# Containers are SINGULAR (stat.health, talent.x, …). Plural spellings do NOT resolve — pure singular.
+# The lone alias is attribute(s) -> stat, kept from the stats+attributes merge (atr./attributes. still
+# read the stat container, per FORMULA_HELP); that's a deliberate synonym, not plural back-compat.
+_CONTAINER_ALIASES = {"attribute": "stat", "attributes": "stat"}
+
+
+def _canon_container(name):
+    """Map a typed container segment to the real Player attribute (only the attribute->stat synonym)."""
+    return _CONTAINER_ALIASES.get(name, name)
 
 
 def _known_keys(player, container):
     """The keys that already 'exist' for a class-path container on this player:
     schema names + live keys for stats, member names for collections, nbt keys."""
-    if container == "stats":
-        return set(STAT_NAMES) | {s.name for s in player.stats}
+    container = _canon_container(container)
+    if container == "stat":
+        return set(STAT_NAMES) | {s.name for s in player.stat}
     if container == "nbt":
         return set(Player.GENERIC_NBT) | set(player.nbt)
     if container == "inventory":
         return {i.type_id for i in player.inventory.items} | {i.name for i in player.inventory.items if i.name}
-    if container in ("talents", "abilities", "effects"):
+    if container in ("talent", "ability", "effect", "quest"):
         return {m.name for m in getattr(player, container)}
     return set()
+
+
+_MISSING_FNS = []  # functions a just-set reaction references but that don't exist yet (populated by
+#                    _path_issues, read by _confirm_or_undo for its 'c = create now' option); cleared per dispatch.
 
 
 def _path_issues(player, value):
@@ -81,6 +133,7 @@ def _path_issues(player, value):
         deltas = list(getattr(value, "entries", []) or [])
     for path, _amount in deltas:
         container, _, key = path.partition(".")
+        container = _canon_container(container)
         if container not in PATH_CONTAINERS:
             guess = difflib.get_close_matches(container, PATH_CONTAINERS, n=1)
             issues.append(f"unknown container '{container}'" + (f" — did you mean '{guess[0]}'?" if guess else ""))
@@ -88,7 +141,7 @@ def _path_issues(player, value):
         # Only 'stats' has a fixed 2-level schema worth a typo check. Member/nbt containers are
         # deeper (inventory.<item>.<field>) and their members come and go — a path to an item/talent
         # not present YET (e.g. ammo added later) is legitimate, not a typo.
-        if container != "stats":
+        if container != "stat":
             continue
         if not key or "." in key or key in _known_keys(player, container):
             continue
@@ -97,14 +150,17 @@ def _path_issues(player, value):
             issues.append(f"{container} has no '{key}' — did you mean {container}.{close[0]}?")
     for name in funcs:  # a reaction naming a function that doesn't exist yet
         if name not in FUNCTIONS:
-            issues.append(f"reaction calls function '{name}' which doesn't exist (create it with /function edit {name})")
+            if name not in _MISSING_FNS:
+                _MISSING_FNS.append(name)  # offer to create it at the undo prompt
+            issues.append(f"reaction calls function '{name}' which doesn't exist yet")
     return issues
 
 
 def _flag_path_issues(player, element):
-    """Push any cost/reaction path problems into the parse-warning collector so the
-    dispatch undo prompt picks them up (uniform with NBT parse warnings)."""
-    for attr in ("cost", "reaction"):
+    """Push cost/reaction/on_hit path problems AND missing-function references (both via
+    _path_issues) into the parse-warning collector so the dispatch undo prompt picks them up
+    (and can offer to create the function — see _MISSING_FNS / _confirm_or_undo)."""
+    for attr in ("cost", "reaction", "on_hit", "reward"):
         for issue in _path_issues(player, getattr(element, attr, None)):
             add_parse_warning(issue)
 
@@ -219,7 +275,10 @@ def _apply_ops(obj, rest):
     else:
         return print("  expected: set|add|reset ...")
     if op == "reset":
-        return obj.reset(*_parse_brace_keys(tail)) if tail else obj.reset()
+        keys = _parse_brace_keys(tail)
+        if "uuid" in keys:
+            return print("  'uuid' is managed automatically — change it with /uuid set, not reset")
+        return obj.reset(*keys) if tail else obj.reset()
     if not tail:
         return print(f"  usage: {op} <field> <value>   or   {op} {{nbt}}")
     reset_first = False
@@ -229,10 +288,15 @@ def _apply_ops(obj, rest):
     else:
         field, _, value_text = tail.partition(" ")
         payload = {field: parse_value(value_text.strip())}
+    if "uuid" in payload:  # uuid is managed automatically; never set it via /modify
+        return print("  'uuid' is managed automatically — change it with /uuid set")
     if op == "set":
         if reset_first:                  # 'set {nbt} true': wipe the nbt block (keep name/identity), refill defaults
             if hasattr(obj, "nbt"):
+                kept_uuid = obj.nbt.get("uuid")  # the uuid survives a reset (it's identity, not data)
                 obj.nbt.clear()
+                if kept_uuid:
+                    obj.nbt["uuid"] = kept_uuid
             _fill_generic_nbt(obj)
         obj.modify(**payload)
     else:
@@ -258,9 +322,12 @@ def _split_player(rest):
 # A <selector> is a name, a group (@a players, @!a NPCs, @m mobs, @ all entities), a sticky
 # ref (@p previous / @s self), OR a list [a,b,c] (runs once per entry). Any of the @-groups can
 # carry an nbt FILTER: @m[species="wolf"], @[mob=true], @a[class="rogue"]. <obj> = an item.
-SELECTOR_TOKENS = ["@", "@a", "@!a", "@m", "@p", "@!p", "@s", "@!s"]
+SELECTOR_TOKENS = ["@", "@a", "@!a", "@m", "@p", "@!p", "@s", "@!s", "@o", "@!o"]
 CURRENT = None  # @p — the sticky last-used selection; set whenever a concrete selector resolves
-SELF = None     # @s — the owner of the proc/function currently executing (set during firing)
+SELF = None     # @s — the SUBJECT: owner of the proc/function/reaction currently firing (the one acted ON)
+ORIGIN = None   # @o — the ORIGIN/cause: who TRIGGERED the current effect (attacker on a hit, caster of an
+                # ability, owner of a proc). @!o = everyone except them. Set alongside SELF at trigger time.
+_INHERIT = object()  # sentinel for _run_function/_apply_reaction: keep the current ORIGIN (don't reset it)
 
 
 def _is_npc(player):
@@ -356,6 +423,14 @@ def _resolve_base(token):
     if token == "@!s":
         self_name = SELF.name if SELF is not None else None
         return [(n, p) for n, p in WORLD.items() if not _is_npc(p) and n != self_name]
+    if token == "@o":  # the origin/cause (attacker, caster, proc owner); set during firing
+        if ORIGIN is None:
+            print("  @o (origin) is only valid inside an effect that has a known cause")
+            return None
+        return [(ORIGIN.name, ORIGIN)]
+    if token == "@!o":
+        origin_name = ORIGIN.name if ORIGIN is not None else None
+        return [(n, p) for n, p in WORLD.items() if not _is_npc(p) and n != origin_name]
     if token in WORLD:
         return [(token, WORLD[token])]
     print(f"  no player/selector '{token}'")
@@ -386,10 +461,10 @@ def _container_line(player, container_attr):
     and append a '(+N hidden at 0)' note so nothing is dropped silently."""
     members = list(getattr(player, container_attr))
     hidden = 0
-    if container_attr == "stats":
+    if container_attr == "stat":
         kept = []
         for member in members:
-            if member.name in player.formulas and _is_zero(member.value):
+            if member.name in player.formula and _is_zero(member.value):
                 hidden += 1
             else:
                 kept.append(member)
@@ -413,7 +488,7 @@ def _resolved(sel):
     if not targets:
         print("  (nothing matched)")
         return None
-    if sel.strip() not in ("@p", "@!p", "@s", "@!s"):
+    if sel.strip() not in ("@p", "@!p", "@s", "@!s", "@o", "@!o"):
         CURRENT = list(targets)
     return targets
 
@@ -421,7 +496,7 @@ def _resolved(sel):
 # --- /character --------------------------------------------------------------
 def _split_name_nbt(arg):
     """Split '<name>[{nbt}] [is_npc]' into ('hero', {...}); names may have spaces. An optional
-    trailing true/false (outside the braces) sets nbt['npc'] — /character add goblin{...} true."""
+    trailing true/false (outside the braces) sets nbt['npc'] — /character new goblin{...} true."""
     arg = arg.strip()
     npc = None
     if "{" in arg:
@@ -477,8 +552,9 @@ def cmd_character(rest):
             return False
         global CURRENT
         WORLD[name] = _fill_generic_nbt(Player(name).modify(**nbt))  # pre-fill all tier keys
+        _seed_equip_slots(WORLD[name])  # per-race slot capacities (from equipment.json), unless given
         if not _is_npc(WORLD[name]):
-            WORLD[name].stats.set("turn", 0)  # non-NPCs join the turn order with a personal turn count
+            WORLD[name].stat.set("turn", 0)  # non-NPCs join the turn order with a personal turn count
         CURRENT = [(name, WORLD[name])]  # the just-created character becomes @p
         print(f"  created '{name}'" + (f" with {nbt}" if nbt else ""))
         return True
@@ -649,12 +725,12 @@ def _value_command(rest, container_attr, cmd_name):
 def _eval_expr(player, expr):
     """Evaluate a formula expression against a player's stats (reuses the formula engine).
     Lets `/stat modify set =MAX(1.5, stat.health - 1.5)` compute a clamped value, etc."""
-    lookup = lambda n: player.stats.get(n) or 0
+    lookup = lambda n: player.stat.get(n) or 0
     return Formula(expr).evaluate(lookup, lookup)
 
 
 def cmd_stat(rest):
-    return _value_command(rest, "stats", "stat")
+    return _value_command(rest, "stat", "stat")
 
 
 # --- /formula (per-player derived-stat formulas) -----------------------------
@@ -673,16 +749,16 @@ def cmd_formula(rest):
         return False
     if sub == "list":
         for name, player in targets:
-            print(f"  {name}.formulas:")
-            for stat_name in player.formulas:
-                print(f"    {stat_name} = {player.formulas.get(stat_name)}")
-            if not len(player.formulas):
+            print(f"  {name}.formula:")
+            for stat_name in player.formula:
+                print(f"    {stat_name} = {player.formula.get(stat_name)}")
+            if not len(player.formula):
                 print("    (none)")
         return True
     if sub == "recompute":
         for name, player in targets:
             player.recompute()
-            print(f"  {name}: recomputed {len(player.formulas)} formulas")
+            print(f"  {name}: recomputed {len(player.formula)} formulas")
         return True
     if sub == "add":
         return _add_renamed("formula")
@@ -695,9 +771,9 @@ def cmd_formula(rest):
             print("  usage: /formula new <selector> <stat> = <expression>")
             return False
         for name, player in targets:
-            player.formulas.add(stat_name, expr)
+            player.formula.add(stat_name, expr)
             player.recompute()
-            print(f"  {name}.formulas.{stat_name} = {player.formulas.get(stat_name)}  ->  stat.{stat_name} = {player.stats.get(stat_name)}")
+            print(f"  {name}.formula.{stat_name} = {player.formula.get(stat_name)}  ->  stat.{stat_name} = {player.stat.get(stat_name)}")
         return True
     if sub == "remove":
         stat_name = remainder.split()[0] if remainder.split() else None
@@ -705,14 +781,210 @@ def cmd_formula(rest):
             print("  usage: /formula remove <selector> <stat>")
             return False
         for name, player in targets:
-            player.formulas.remove(stat_name)
-            had_stat = stat_name in player.stats
-            player.stats.remove(stat_name)  # drop the derived stat too — no frozen orphan value
+            player.formula.remove(stat_name)
+            had_stat = stat_name in player.stat
+            player.stat.remove(stat_name)  # drop the derived stat too — no frozen orphan value
             note = " (and its stat)" if had_stat else ""
             print(f"  {name}: removed formula '{stat_name}'{note}")
         return True
     print("  usage: /formula <new|modify|remove|list|recompute> <selector> ...")
     return False
+
+
+# --- equipment: per-race slot capacities (equipment.json) --------------------
+# equipment.json maps race -> {slot: capacity}. A character's equip_slots nbt is seeded from its
+# race on creation (unless given explicitly); the Equipment container's per-slot capacity is read
+# live from that nbt, so changing equip_slots changes what the character can wear.
+def _load_equip_races(path="equipment.json"):
+    try:
+        with open(path) as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except ValueError as err:
+        print(f"  [warning] {path} failed to parse ({err}); no race slot-sets loaded")
+        return {}
+
+
+EQUIP_RACES = _load_equip_races()
+
+
+def _seed_equip_slots(player):
+    """Give a new character its race's slot capacities (equipment.json), unless equip_slots was
+    set explicitly at creation. Falls back to the 'default' race entry."""
+    if isinstance(player.nbt.get("equip_slots"), dict):
+        return  # explicitly provided — respect it
+    race = player.field_value("race")
+    slots = EQUIP_RACES.get(race) or EQUIP_RACES.get("default")
+    if slots:
+        player.nbt["equip_slots"] = dict(slots)
+
+
+def _equip_capacity(player, slot):
+    """How many items this character can wear in `slot` (0 = can't, e.g. race lacks it)."""
+    slots = player.nbt.get("equip_slots")
+    return int(slots.get(slot, 0) or 0) if isinstance(slots, dict) else 0
+
+
+def _parse_element_specs(text):
+    """Parse a bracketed list of element specs 'name{nbt},name2{nbt}' into [(name, nbt), ...].
+    (The list parser leaves bracket-values with braces as raw text, so we split them here.)"""
+    text = str(text or "").strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    specs = []
+    for chunk in _split_pairs(text):
+        chunk = chunk.strip()
+        if chunk:
+            type_id, nbt, _ = parse_item_text(chunk)
+            specs.append((type_id, nbt))
+    return specs
+
+
+def _grant_equip_effects(player, item):
+    """On equip: grant talents from the item's `talents` nbt (each TAGGED with _equipped_by so it
+    auto-removes on unequip — continuous effects), then fire a one-shot `on_equip` REACTION
+    (class-path deltas AND/OR function calls — NOT auto-undone). Passive STAT bonuses are NOT here —
+    they fold in live via recompute (auto-reversible)."""
+    for type_id, nbt in _parse_element_specs(item.nbt.get("talents")):
+        talent = Talent.from_nbt(type_id, nbt)
+        talent.nbt["_equipped_by"] = item.type_id  # tag for removal on unequip
+        player.talent.add(talent)
+    if item.nbt.get("on_equip"):
+        _apply_reaction(player, Reaction.parse(item.nbt["on_equip"]))
+    # when_equipped: sticky signals kept ON for as long as the item is worn (continuous procs).
+    _report_fired(player.name, _enable_procs(player, _proc_tokens(item.nbt.get("when_equipped"))))
+    _report_fired(player.name, _pulse_procs(player, ["item_equipped"] + _proc_tokens(item.nbt.get("on_equip_proc"))))
+
+
+def _revoke_equip_effects(player, item):
+    """On unequip: remove talents this item granted (tagged _equipped_by), turn OFF the item's
+    when_equipped signals, fire on_unequip REACTION, then pulse 'item_unequipped' + any on_unequip_proc."""
+    for talent in list(player.talent):
+        if talent.nbt.get("_equipped_by") == item.type_id:
+            player.talent.remove(talent)
+    _disable_procs(player, _proc_tokens(item.nbt.get("when_equipped")))
+    if item.nbt.get("on_unequip"):
+        _apply_reaction(player, Reaction.parse(item.nbt["on_unequip"]))
+    _report_fired(player.name, _pulse_procs(player, ["item_unequipped"] + _proc_tokens(item.nbt.get("on_unequip_proc"))))
+
+
+def _equip_weapon(player, item, wield):
+    """Equip a weapon into hand slot(s) with REPLACEMENT: 'both' takes BOTH hands; 'main'/'off'
+    replace that hand; equipping into a hand a two-hander occupies frees the two-hander. Displaced
+    weapons return to inventory (and their equip-effects are revoked)."""
+    need = ["main_hand", "off_hand"] if wield == "both" else (["main_hand"] if wield == "main" else ["off_hand"])
+    for hand in need:
+        if _equip_capacity(player, hand) <= 0:
+            print(f"  {player.name} has no '{hand}' slot — can't wield {item.type_id}")
+            return
+        player.equipment.define_slot(hand, _equip_capacity(player, hand))
+
+    def clear(slot):
+        freed = []
+        for worn in list(player.equipment.equipped(slot)):
+            player.equipment.unequip(slot, worn)
+            player.inventory.add(worn)
+            _revoke_equip_effects(player, worn)
+            freed.append(worn.type_id)
+        return freed
+    main = player.equipment.equipped("main_hand")
+    displaced = []
+    if wield == "both":
+        displaced += clear("main_hand") + clear("off_hand")
+        target = "main_hand"
+    elif wield == "main":
+        displaced += clear("main_hand")
+        target = "main_hand"
+    else:  # off — a two-hander in main_hand uses both hands, so it must come off
+        if main and main[0].nbt.get("wield") == "both":
+            displaced += clear("main_hand")
+        displaced += clear("off_hand")
+        target = "off_hand"
+    player.inventory.remove(item)
+    player.equipment.equip(target, item)
+    _grant_equip_effects(player, item)
+    player.recompute()
+    where = "both hands" if wield == "both" else target
+    print(f"  {player.name} wields {item.type_id} ({where})" + (f"; displaced {displaced}" if displaced else ""))
+
+
+def _item_equip(arg):
+    """/item equip <selector> <item> [slot]  — equip an inventory item.
+    Weapons (nbt 'wield' main/off/both) go to hand slots with swap logic; other gear uses 'equippable'
+    + the per-race capacity in equip_slots. Slot inferred when 'equippable' lists exactly one."""
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    parts = remainder.split()
+    if not parts:
+        print("  usage: /item equip <selector> <item> [slot]")
+        return False
+    item_name, slot = parts[0], (parts[1] if len(parts) > 1 else None)
+    for name, player in targets:
+        item = player.inventory.get(item_name)
+        if item is None:
+            print(f"  {name} has no '{item_name}' in inventory")
+            continue
+        wield = item.nbt.get("wield")
+        if wield in ("main", "off", "both"):  # weapons -> hand slots (with replacement)
+            _equip_weapon(player, item, wield)
+            continue
+        equippable = item.nbt.get("equippable")
+        options = equippable if isinstance(equippable, list) else ([equippable] if equippable else [])
+        chosen = slot or (options[0] if len(options) == 1 else None)
+        if chosen is None:
+            print(f"  {item_name} fits {options or 'no slots'} — name one: /item equip {name} {item_name} <slot>")
+            continue
+        if options and chosen not in options:
+            print(f"  {item_name} can't go in '{chosen}' (equippable: {options})")
+            continue
+        cap = _equip_capacity(player, chosen)
+        if cap <= 0:
+            print(f"  {name} has no '{chosen}' slot (race/equip_slots) — can't equip there")
+            continue
+        if len(player.equipment.equipped(chosen)) >= cap:
+            print(f"  {name}'s '{chosen}' is full ({cap}/{cap})")
+            continue
+        player.equipment.define_slot(chosen, cap)
+        player.inventory.remove(item)
+        player.equipment.equip(chosen, item)
+        _grant_equip_effects(player, item)
+        player.recompute()
+        print(f"  {name} equipped {item.type_id} in {chosen} ({len(player.equipment.equipped(chosen))}/{cap})")
+    return True
+
+
+def _item_unequip(arg):
+    """/item unequip <selector> <item-or-slot>  — return equipped item(s) to inventory and revoke
+    any talents/effects they granted. 2nd token = an item name/type, or a slot (clears the slot)."""
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    key = remainder.split()[0] if remainder.split() else None
+    if not key:
+        print("  usage: /item unequip <selector> <item-or-slot>")
+        return False
+    for name, player in targets:
+        worn = player.equipment.equipped()  # {slot: [items]}
+        pairs = ([(key, it) for it in list(worn[key])] if key in worn
+                 else [(slot, it) for slot, items in worn.items() for it in list(items)
+                       if it.name == key or it.type_id == key])
+        removed = []
+        for slot, item in pairs:
+            player.equipment.unequip(slot, item)
+            player.inventory.add(item)
+            _revoke_equip_effects(player, item)
+            removed.append(f"{item.type_id} from {slot}")
+        if removed:
+            player.recompute()
+            print(f"  {name} unequipped " + ", ".join(removed))
+        else:
+            print(f"  {name} has nothing equipped matching '{key}'")
+    return True
 
 
 # --- /item add|remove|loot|modify|list ---------------------------------------
@@ -723,7 +995,7 @@ def _item_add(arg):
     if targets is None:
         return False
     if not remainder:
-        print("  usage: /item add <selector> <item>[{nbt}] [count]")
+        print("  usage: /item new <selector> <item>[{nbt}] [count]")
         return False
     try:
         type_id, nbt, after = parse_item_text(remainder)
@@ -900,18 +1172,60 @@ def _item_loot(arg):
     return True
 
 
-ITEM_SUBS = ["add", "remove", "loot", "modify", "list"]
+ITEM_SUBS = ["new", "equip", "unequip", "use", "remove", "loot", "modify", "list"]  # 'add'/'give' = hidden aliases of 'new'
+
+
+def _item_use(arg):
+    """/item use <selector> <item>  — use an inventory item.
+    Fires the item's `on_use` REACTION (functions + class-path deltas, @s = the user); pulses proc
+    signals (base 'item_used' + any nbt `on_use_proc`); and if the item carries a `consume` count
+    (the editor's 'destroy qty x N on use'), removes that many from the stack — a depleted stack
+    leaves the inventory and additionally pulses 'item_consumed'."""
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    item_name = remainder.strip()
+    if not item_name:
+        print("  usage: /item use <selector> <item>")
+        return False
+    for name, player in targets:
+        item = player.inventory.get(item_name)
+        if item is None:
+            print(f"  {name} has no '{item_name}' in inventory")
+            continue
+        changes = _apply_reaction(player, Reaction.parse(item.nbt["on_use"]), origin=player) if item.nbt.get("on_use") else []
+        signals = ["item_used"] + _proc_tokens(item.nbt.get("on_use_proc"))
+        consume = item.nbt.get("consume")
+        qty = int(consume) if isinstance(consume, (int, float)) else (int(consume) if isinstance(consume, str) and consume.isdigit() else (1 if consume else 0))
+        consumed = 0
+        if qty:
+            remaining = (item.quantity or 1) - qty
+            if remaining > 0:
+                item.quantity = remaining
+            else:
+                player.inventory.remove(item)
+            consumed = qty
+            signals.append("item_consumed")
+        player.recompute()
+        detail = f" ({', '.join(changes)})" if changes else ""
+        print(f"  {name} uses {item.type_id}{detail}" + (f"; consumed {consumed}" if consumed else "")
+              + f"; pulsed {', '.join(signals)}")
+        _report_fired(name, _pulse_procs(player, signals))
+    return True
 
 
 def cmd_item(rest):
     sub, _, arg = rest.partition(" ")
     sub, arg = sub.strip(), arg.strip()
-    handler = {"add": _item_add, "give": _item_add, "remove": _item_remove,
+    # 'new' is canonical (consistent with /character new etc.); 'add'/'give' are hidden aliases.
+    handler = {"new": _item_add, "add": _item_add, "give": _item_add, "remove": _item_remove,
+               "equip": _item_equip, "unequip": _item_unequip, "use": _item_use,
                "loot": _item_loot, "modify": _item_modify, "list": _item_list}.get(sub)
     if handler:
         return handler(arg)
-    print("  usage: /item add <selector> <item>  |  remove <selector> <item> [count]  |  "
-          "loot <table> <selector>  |  modify <selector> <item> <set|add|reset> {nbt}  |  list <selector>")
+    print("  usage: /item new <selector> <item>  |  equip <selector> <item> [slot]  |  unequip <selector> <item-or-slot>  |  "
+          "use <selector> <item>  |  remove <selector> <item> [count]  |  loot <table> <selector>  |  modify <selector> <item> <set|add|reset> {nbt}  |  list <selector>")
     return False
 
 
@@ -934,7 +1248,7 @@ def cmd_kill(rest):
             del WORLD[name]
             print(f"  killed '{name}' (removed)")
         else:
-            player.stats.set("health", 0)
+            player.stat.set("health", 0)
             fired = _pulse_procs(player, ["died"])
             print(f"  {name}: health -> 0; pulsed 'died'" + ("" if fired else " (no talents reacted)"))
             _report_fired(name, fired)
@@ -970,17 +1284,30 @@ def _effective_attacker(attacker, weapons, attack_override=None):
     eff = copy.deepcopy(attacker)
     for weapon in weapons:
         for key, value in _weapon_stats(weapon).items():
-            eff.stats.set(key, (eff.stats.get(key) or 0) + value)
+            eff.stat.set(key, (eff.stat.get(key) or 0) + value)
     if attack_override is not None:
-        eff.stats.set("attack", attack_override)
+        eff.stat.set("attack", attack_override)
     eff.recompute()
     return eff
 
 
+def _effective_stat(entity, name):
+    """A stat INCLUDING equipped non-weapon gear (recompute folds those into BASE-stat reads but
+    doesn't bake them into the stored value, so armor_class/defense read 0 otherwise)."""
+    return (entity.stat.get(name) or 0) + entity._equipped_stat_bonus().get(name, 0)
+
+
 def _resolve_damage(eff, target, explicit=None):
-    """Run the file-driven combat resolution. `explicit` = {type:raw} feeds raw damage directly
-    (the 'inverse'); else raw per type comes from the effective attacker's derived stats.
-    Returns (total, [(type, raw, net), ...])."""
+    """File-driven combat resolution + armor_class (pre-resist) and defense (flat, post).
+    `explicit` = {type:raw} feeds raw per type directly (the 'inverse'); else raw comes from the
+    effective attacker's derived stats. Returns (total, [(type, raw, net), ...]).
+    PIPELINE per type: raw  ->  armor_class gate (if AC > this raw, ignore armor_class_efficiency
+    of it, default 0.6)  ->  resist/ward (combat_rules.csv).  Then sum,  then flat `defense`
+    (a flat reduction that can NEVER bring the hit below 1)."""
+    target.recompute()  # make sure derived defenses (resist/ward) reflect current gear/inputs
+    armor_class = _effective_stat(target, "armor_class")
+    ac_efficiency = _effective_stat(target, "armor_class_efficiency") or 0.6   # default 60% ignored
+    defense = _effective_stat(target, "defense")
     total, breakdown = 0.0, []
     for spec in COMBAT_TYPES:
         typ = spec["type"]
@@ -989,17 +1316,21 @@ def _resolve_damage(eff, target, explicit=None):
                 continue
             raw = float(explicit[typ])
         else:
-            raw = float(eff.stats.get(spec["raw"]) or 0)
+            raw = float(eff.stat.get(spec["raw"]) or 0)
         if not raw:
             continue
-        pen = float(eff.stats.get(spec["penetration"]) or 0) if spec["penetration"] else 0.0
-        res = float(target.stats.get(spec["defense"]) or 0) if spec["defense"] else 0.0
+        if armor_class > raw:                 # armor_class only bites hits it out-classes...
+            raw *= (1 - ac_efficiency)         # ...then it ignores armor_class_efficiency of them
+        pen = float(eff.stat.get(spec["penetration"]) or 0) if spec["penetration"] else 0.0
+        res = float(target.stat.get(spec["defense"]) or 0) if spec["defense"] else 0.0
         rule = COMBAT_RULES.get(spec["channel"], "atk.raw")
         atk_vals, def_vals = {"raw": raw, "pen": pen}, {"res": res}
         net = Formula(rule).evaluate(lambda n: 0, lambda n: 0,
                                      namespaces={"atk": atk_vals.get, "def": def_vals.get})
         total += net
         breakdown.append((typ, round(raw, 2), round(net, 2)))
+    if total > 1 and defense:                  # flat reduction, floored at 1 (defense never kills)
+        total = max(1.0, total - defense)
     return total, breakdown
 
 
@@ -1023,16 +1354,17 @@ def _lethal(attacker_name, attacker, target_name, target):
     except EOFError:
         choice = "k"
     if choice.startswith("s"):
-        print(f"    {target_name} is spared (left at {round(target.stats.get('health') or 0, 2)} health)")
+        print(f"    {target_name} is spared (left at {round(target.stat.get('health') or 0, 2)} health)")
     else:
         finish()
 
 
 def cmd_attack(rest):
-    """/attack <attacker> <target> with <weapon>[+<weapon2>]   resolve a weapon attack
-       /attack <attacker> <target> {pierce:5,slash:3}          deal explicit per-type raw damage
+    """/attack <attacker> <target>                            use the attacker's EQUIPPED hands (main+off)
+       /attack <attacker> <target> with <weapon>[+<weapon2>]   override: wield inventory item(s) for this hit
+       /attack <attacker> <target> {pierce:5,slash:3}          deal explicit per-type raw damage (the 'inverse')
        /attack <attacker> <target> <number>                    use <number> as the attacker's effective attack
-       /attack <attacker> list                                 list the attacker's wieldable items (have a 'wield' nbt)
+       /attack <attacker> list                                 show equipped hands + wieldable inventory
     Damage runs through combat.csv + combat_rules.csv against the target's defenses, then is
     subtracted from health; a lethal hit triggers the execution_check (see _lethal)."""
     atk_sel, after = _split_selector(rest)
@@ -1043,13 +1375,13 @@ def cmd_attack(rest):
     attacker_name, attacker = attackers[0]
     after = after.strip()
     if after == "list" or not after:
+        hands = attacker.equipment.equipped("main_hand") + attacker.equipment.equipped("off_hand")
+        print(f"  {attacker_name} hands: " + (", ".join(f"{it.type_id}(wield:{it.nbt.get('wield')})" for it in hands) or "empty"))
         wieldable = [it for it in attacker.inventory if it.nbt.get("wield")]
-        if not wieldable:
-            print(f"  {attacker_name} has no wieldable items (set an item's nbt 'wield' to main/off/both)")
         for it in wieldable:
-            print(f"  {it.type_id} (wield:{it.nbt.get('wield')}) stats={_weapon_stats(it) or '{}'}")
+            print(f"  inventory: {it.type_id} (wield:{it.nbt.get('wield')}) stats={_weapon_stats(it) or '{}'}")
         if not after:
-            print("  usage: /attack <attacker> <target> with <weapon>[+<weapon2>] | {type:amount} | <number>")
+            print("  usage: /attack <attacker> <target> [with <weapon>[+<weapon2>] | {type:amount} | <number>]   (no spec = equipped hands)")
         return True
     tgt_sel, spec = _split_selector(after)
     targets = _resolved(tgt_sel)
@@ -1080,17 +1412,60 @@ def cmd_attack(rest):
         except ValueError:
             print("  spec must be: with <weapon> | {type:amount,...} | <number>")
             return False
+    else:  # no spec -> use the attacker's EQUIPPED hands (main_hand + off_hand)
+        weapons = attacker.equipment.equipped("main_hand") + attacker.equipment.equipped("off_hand")
+        if not weapons:
+            print(f"  {attacker_name} has nothing equipped in hand — equip a weapon, or pass {{type:amount}} or a number")
+            return False
     eff = _effective_attacker(attacker, weapons, attack_override)
+    reach = float(eff.stat.get("reach") or 0)  # base + wielded weapon's reach
     wpn_label = ("+".join(w.type_id for w in weapons) if weapons else
                  ("{...}" if explicit is not None else f"attack {attack_override}"))
     for target_name, target in list(targets):
+        gap = _distance(attacker, target)  # Chebyshev; None if either side is unpositioned
+        if gap is not None and gap > reach:
+            print(f"  {target_name} is out of reach ({gap} tiles away, reach {reach:g}) — move closer")
+            continue
         total, breakdown = _resolve_damage(eff, target, explicit)
-        target.stats.set("health", (target.stats.get("health") or 0) - total)
+        target.stat.set("health", (target.stat.get("health") or 0) - total)
         target.recompute()
         print(f"  {attacker_name} attacks {target_name} with {wpn_label}: {round(total, 2)} damage "
-              f"{breakdown} -> {target_name}.health = {round(target.stats.get('health') or 0, 2)}")
-        if (target.stats.get("health") or 0) <= 0:
+              f"{breakdown} -> {target_name}.health = {round(target.stat.get('health') or 0, 2)}")
+        if (target.stat.get("health") or 0) <= 0:
             _lethal(attacker_name, attacker, target_name, target)
+    return True
+
+
+# --- /move (grid movement, speed-gated, Chebyshev) ---------------------------
+
+def cmd_move(rest):
+    """/move <selector> <x> <y>   step onto a cell, gated by the mover's `speed` in tiles
+    (Chebyshev: diagonals count as 1). First placement (no current pos) is free; after that the
+    step must be <= effective speed. GM teleport with NO speed check: /map pos <player> <x> <y>."""
+    sel, remainder = _split_selector(rest)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    nums = [int(t) for t in remainder.split() if t.lstrip("-").isdigit()]
+    if len(nums) < 2:
+        print("  usage: /move <selector> <x> <y>")
+        return False
+    x, y = nums[0], nums[1]
+    for name, mover in targets:
+        cur = _entity_pos(mover)
+        speed = _effective_stat(mover, "speed")
+        if cur is not None:
+            step = max(abs(x - cur[0]), abs(y - cur[1]))  # Chebyshev tiles
+            if step > speed:
+                print(f"  {name} can't reach ({x},{y}) — {step} tiles away, speed {speed:g}")
+                continue
+            _set_entity_pos(mover, x, y)
+            mover.recompute()
+            print(f"  {name} moves to ({x},{y})  ({step} tile{'s' if step != 1 else ''})")
+        else:
+            _set_entity_pos(mover, x, y)
+            mover.recompute()
+            print(f"  {name} placed at ({x},{y})")
     return True
 
 
@@ -1100,6 +1475,12 @@ def cmd_attack(rest):
 # Player turn order = the non-NPC players in creation order (WORLD is insertion-ordered).
 TURN = 0
 TURN_ACTIVE = None
+
+
+def _log(event):
+    """Append an event to the session HISTORY, stamped with the world turn and whose turn is active
+    at that moment, e.g. '[turn 3 · noael] /attack noael goblin'. (TURN/TURN_ACTIVE resolved live.)"""
+    HISTORY.append(f"[turn {TURN} · {TURN_ACTIVE or 'no active turn'}] {event}")
 
 
 def _apply_slice(spec, lst):
@@ -1145,7 +1526,7 @@ def _tick_effects(player):
     """One turn passes for each effect: if this is a firing turn (per its step schedule), fire
     it (pulse proc + reaction); then count duration down and remove at 0. Effects with neither
     a proc nor a reaction just tick silently."""
-    for effect in list(player.effects):
+    for effect in list(player.effect):
         duration = effect.field_value("duration")
         if not isinstance(duration, (int, float)) or isinstance(duration, bool):
             continue  # no valid duration -> inert (doesn't tick or fire)
@@ -1159,14 +1540,14 @@ def _tick_effects(player):
         effect._elapsed += 1
         new_duration = int(duration) - 1
         if new_duration <= 0:
-            player.effects.remove(effect)
+            player.effect.remove(effect)
         else:
             effect.modify(duration=new_duration)
 
 
 def _tick_cooldowns(player):
     """One turn passes: count each ability's cooldown down toward 0 (ready)."""
-    for ability in player.abilities:
+    for ability in player.ability:
         if isinstance(ability.cooldown, Cooldown):
             ability.cooldown.tick()
 
@@ -1178,16 +1559,16 @@ def _regen(player):
     for characters whose health/mana formula has been removed via /formula)."""
     for live, regen, ceiling_key in (("health", "health_regen", "max_health"),
                                      ("mana", "mana_regen", "max_mana")):
-        if live in player.formulas:
+        if live in player.formula:
             continue
-        current = player.stats.get(live)
+        current = player.stat.get(live)
         if current is None:
             continue
-        ceiling = player.stats.get(ceiling_key)
-        new_value = current + (player.stats.get(regen) or 0)
+        ceiling = player.stat.get(ceiling_key)
+        new_value = current + (player.stat.get(regen) or 0)
         if ceiling is not None and new_value > ceiling:
             new_value = ceiling
-        player.stats.set(live, new_value)
+        player.stat.set(live, new_value)
 
 
 def _turn_order():
@@ -1203,7 +1584,8 @@ def _process_turn_start(name):
         return
     _tick_cooldowns(player)
     _tick_effects(player)
-    player.stats.set("turn", (player.stats.get("turn") or 0) + 1)  # this player's own turn count
+    _tick_quests(player)
+    player.stat.set("turn", (player.stat.get("turn") or 0) + 1)  # this player's own turn count
     _regen(player)
     player.recompute()  # derived stats + DELTA-based per-turn formulas
     for talent_name, changes in _pulse_procs(player, ["turn_start"]):
@@ -1238,12 +1620,11 @@ def _next_player_turn():
     nxt = (idx + 1) % len(order)
     if nxt == 0:  # cycled through everyone -> world time advances
         TURN += 1
-        HISTORY.append("===")  # turn-cycle boundary
+        _log(f"=== world turn {TURN} — {_format_date(TURN).strip()} ===")  # cycle boundary
         print(f"  === cycle complete — world turn {TURN}: {_format_date(TURN).strip()} ===")
         _fire_due_events(TURN)  # any queued world events whose turn arrived
-    else:
-        HISTORY.append("---")  # player-turn boundary
     TURN_ACTIVE = order[nxt]
+    _log(f"--- {TURN_ACTIVE}'s turn ---")  # player-turn boundary (now that TURN_ACTIVE is updated)
     _process_turn_start(TURN_ACTIVE)
     return TURN_ACTIVE
 
@@ -1266,7 +1647,7 @@ def cmd_turn(rest):
         if not arg:
             name = _next_player_turn()
             if name:
-                print(f"  now {name}'s turn  (their stats.turn = {WORLD[name].stats.get('turn')})")
+                print(f"  now {name}'s turn  (their stats.turn = {WORLD[name].stat.get('turn')})")
             return TURN
         if arg == "cycle":
             order = _turn_order()
@@ -1282,7 +1663,7 @@ def cmd_turn(rest):
             return False
         for name, player in targets:
             _process_turn_start(name)
-            print(f"  {name}: advanced their turn (stats.turn = {player.stats.get('turn')})")
+            print(f"  {name}: advanced their turn (stats.turn = {player.stat.get('turn')})")
         return TURN
     if sub in ("add", "set"):
         try:
@@ -1817,8 +2198,301 @@ CELL_H = 6    # content rows per cell: row 0 = biome label, rows 1.. = biome art
 
 
 def _save_map():
+    _ensure_session_uuids()  # so freshly-created structures are saved WITH their uuid
+    MAP["structures"] = [s.as_dict() for s in STRUCTURES]  # persist structures alongside cells
     with open(MAP_FILE, "w") as handle:
         json.dump(MAP, handle, indent=2)
+
+
+def _load_structures():
+    """Rebuild Structure objects from the map file's serialized 'structures' list."""
+    out = []
+    for entry in MAP.get("structures", []):
+        if isinstance(entry, dict) and entry.get("name"):
+            nbt = {k: v for k, v in entry.items() if k != "name"}
+            out.append(Structure.from_nbt(entry["name"], nbt))
+    return out
+
+
+STRUCTURES = _load_structures()  # all map structures (global; each carries its own pos:[x,y])
+
+
+# --- UUIDs (per-session unique ids: <2-letter type>-<4 base62>, e.g. it-aB39) ----------------
+# Every initiated entity carries a uuid in its nbt under 'uuid'. Format: a 2-letter TYPE code, a
+# dash, then 4 base62 chars (A-Z a-z 0-9) = 14,776,336 per type. Unique WITHIN a session (not across
+# sessions) by generate-and-check. Stored in nbt so it round-trips through every existing save path;
+# excluded from item stack_key (fungible copies still merge) and from manual /modify edits.
+UUID_ALPHABET = string.ascii_letters + string.digits  # 62 chars
+UUID_TYPE_CODES = {"item": "it", "quest": "qs", "structure": "st",
+                   "talent": "tl", "ability": "ab", "effect": "ef"}
+
+
+def _uuid_type_code(obj):
+    """The 2-letter type code for an entity (pl/np/mb for characters by role; else by class).
+    Item's type_id is the SPECIFIC type (potion/sword/...), so items are matched by class, not type_id."""
+    if isinstance(obj, Mob):
+        return "mb"
+    if isinstance(obj, Player):
+        return "np" if obj.field_value("npc") else "pl"
+    if isinstance(obj, Item):
+        return "it"
+    return UUID_TYPE_CODES.get(getattr(obj, "type_id", ""), "xx")
+
+
+def _all_entities():
+    """Every uuid-bearing object live in the session: characters + their items/elements + structures."""
+    for player in WORLD.values():
+        yield player
+        yield from player.inventory.items
+        for items in player.equipment.equipped().values():
+            yield from items
+        yield from player.talent
+        yield from player.ability
+        yield from player.effect
+        yield from player.quest
+    yield from STRUCTURES
+
+
+def _entity_uuid(obj):
+    return obj.nbt.get("uuid") if hasattr(obj, "nbt") else None
+
+
+def _uuids_in_use():
+    return {u for u in (_entity_uuid(e) for e in _all_entities()) if u}
+
+
+def _mint_uuid(obj, used):
+    """A fresh '<code>-<4 base62>' not in `used` (which is updated in place)."""
+    code = _uuid_type_code(obj)
+    while True:
+        uid = code + "-" + "".join(random.choice(UUID_ALPHABET) for _ in range(4))
+        if uid not in used:
+            used.add(uid)
+            return uid
+
+
+def _ensure_session_uuids():
+    """Give a uuid to any live entity that lacks one (idempotent). Run after each command, so
+    anything initiated by ANY path ends up with a session-unique id."""
+    used = _uuids_in_use()
+    for entity in _all_entities():
+        if hasattr(entity, "nbt") and not entity.nbt.get("uuid"):
+            entity.nbt["uuid"] = _mint_uuid(entity, used)
+
+
+def _find_by_uuid(uid):
+    """The live entity holding `uid`, or None."""
+    return next((e for e in _all_entities() if _entity_uuid(e) == uid), None)
+
+
+def _entity_owner(target):
+    """The character that holds `target` (an item/element), or None for characters/structures."""
+    for player in WORLD.values():
+        contents = (list(player.inventory.items) + list(player.talent) + list(player.ability)
+                    + list(player.effect) + list(player.quest))
+        for items in player.equipment.equipped().values():
+            contents += list(items)
+        if target in contents:
+            return player
+    return None
+
+
+def _describe_entity(entity):
+    """A short human label for /uuid lookup: type, name, and where it lives."""
+    code = _uuid_type_code(entity)
+    name = getattr(entity, "name", "") or getattr(entity, "type_id", "?")  # type_id when unnamed (items)
+    if isinstance(entity, Player):
+        return f"{code} {name}"
+    if entity in STRUCTURES:
+        return f"{code} {name} @ {entity.pos or '(no cell)'}"
+    owner = _entity_owner(entity)
+    return f"{code} {name}" + (f" (on {owner.name})" if owner else "")
+
+
+def _structure_matches(struct, ident, filt):
+    """A structure matches if its name == ident and every key:value in the nbt filter holds."""
+    if struct.name != ident:
+        return False
+    return all(struct.field_value(key) == value for key, value in filt.items())
+
+
+def _choose_structure(matches):
+    """One match -> return it. Several -> numbered menu; type the number + Enter (blank cancels)."""
+    if len(matches) == 1:
+        return matches[0]
+    print(f"  {len(matches)} structures match — pick one:")
+    for i, struct in enumerate(matches, 1):
+        print(f"    {i}. {struct}  @ {struct.pos or '(no cell)'}")
+    try:
+        raw = input("  number (blank = cancel): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if not raw.isdigit() or not (1 <= int(raw) <= len(matches)):
+        print("  cancelled")
+        return None
+    return matches[int(raw) - 1]
+
+
+def _cell_tokens(text):
+    """Parse trailing 'x,y x,y ...' coordinate tokens into [[x,y],...]. Returns (cells, bad_token):
+    bad_token is the first token that isn't an 'x,y' pair (None if all good)."""
+    cells = []
+    for tok in text.split():
+        match = re.fullmatch(r"(-?\d+),(-?\d+)", tok)
+        if match:
+            cells.append([int(match.group(1)), int(match.group(2))])
+        else:
+            return cells, tok
+    return cells, None
+
+
+UUID_PATTERN = re.compile(r"[A-Za-z0-9]{2}-[A-Za-z0-9]{4}")
+
+
+def cmd_uuid(rest):
+    """/uuid get <selector>            show the uuid(s) of matched character(s)
+       /uuid lookup <uuid>             what entity holds that uuid
+       /uuid set <old-uuid> <new-uuid> change a uuid (if the new one's taken: swap / regen / cancel)
+       /uuid list [type]               counts per type, or every uuid of a 2-letter type (it/pl/mb/...)
+    Every initiated entity has a session-unique uuid like it-aB39 (2-letter type + 4 base62)."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    if sub == "get":
+        targets = _resolved(arg) if arg else None
+        if not targets:
+            print("  usage: /uuid get <selector>")
+            return False
+        for name, player in targets:
+            print(f"  {name}: {_entity_uuid(player) or '(none yet)'}")
+        return [_entity_uuid(p) for _n, p in targets]
+    if sub == "lookup":
+        entity = _find_by_uuid(arg)
+        if entity is None:
+            print(f"  no entity has uuid '{arg}'")
+            return False
+        print(f"  {arg} -> {_describe_entity(entity)}")
+        return True
+    if sub == "list":
+        in_use = sorted(_uuids_in_use())
+        if arg:  # a 2-letter type filter
+            picks = [u for u in in_use if u[:2] == arg]
+            print(f"  {arg}: " + (", ".join(picks) if picks else "(none)"))
+            return picks
+        counts = {}
+        for u in in_use:
+            counts[u[:2]] = counts.get(u[:2], 0) + 1
+        print(f"  {len(in_use)} uuid(s): " + (", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "(none)"))
+        return counts
+    if sub == "set":
+        old, _, new = arg.partition(" ")
+        old, new = old.strip(), new.strip()
+        if not old or not new:
+            print("  usage: /uuid set <old-uuid> <new-uuid>")
+            return False
+        if not UUID_PATTERN.fullmatch(new):
+            print(f"  '{new}' isn't a valid uuid — use <2 chars>-<4 chars>, e.g. it-aB39")
+            return False
+        entity = _find_by_uuid(old)
+        if entity is None:
+            print(f"  no entity has uuid '{old}'")
+            return False
+        if new == old:
+            print("  (unchanged)")
+            return True
+        clash = _find_by_uuid(new)
+        if clash is None:
+            entity.nbt["uuid"] = new
+            print(f"  {old} -> {new}  ({_describe_entity(entity)})")
+            return True
+        # new is taken: ask what to do
+        print(f"  '{new}' is already used by {_describe_entity(clash)}.")
+        choice = _read_choice("  [s = swap the two / r = give that one a new random id / c = cancel]: ")
+        if choice == "s":
+            entity.nbt["uuid"], clash.nbt["uuid"] = new, old
+            print(f"  swapped: {_describe_entity(entity)}={new}, {_describe_entity(clash)}={old}")
+            return True
+        if choice == "r":
+            entity.nbt["uuid"] = new                       # take the wanted id
+            clash.nbt["uuid"] = _mint_uuid(clash, _uuids_in_use())  # other one gets a fresh random id
+            print(f"  {_describe_entity(entity)}={new}, {_describe_entity(clash)}={clash.nbt['uuid']}")
+            return True
+        print("  cancelled — nothing changed.")
+        return False
+    print("  usage: /uuid <get|lookup|set|list> ...")
+    return False
+
+
+def cmd_structure(rest):
+    """/structure new <structure>{nbt} [<x,y> <x,y> ...]   place a structure spanning those cells
+       /structure delete <structure>{nbt}          remove (menu to pick if several match)
+       /structure modify <structure>{nbt} <set|add|reset> <field> [{nbt}|value]
+       /structure list
+    The structure is always the first arg; any number of x,y cells follow (multi-cell kingdoms etc.).
+    Cells can instead be given as pos in the nbt (pos:[[1,2],[2,2]]); positional cells override it.
+    Structures are NOT unique — any number can share a name; the {nbt} narrows, a menu disambiguates."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    if sub == "list":
+        if not STRUCTURES:
+            print("  (no structures)")
+            return []
+        for struct in STRUCTURES:
+            print(f"  {struct}  @ {struct.pos or '(no cell)'}")
+        return [s.name for s in STRUCTURES]
+    if sub == "new":
+        if not arg:
+            print("  usage: /structure new <structure>{nbt} [<x,y> <x,y> ...]")
+            return False
+        try:
+            ident, nbt, trailing = parse_item_text(arg)  # 'kingdom{nbt} 1,2 2,2' -> ident, nbt, '1,2 2,2'
+        except ValueError as error:
+            print(f"  parse error: {error}")
+            return False
+        cells, bad = _cell_tokens(trailing)
+        if bad is not None:
+            print(f"  bad cell '{bad}' — use x,y (e.g. 1,2).  /structure new <structure>{{nbt}} [<x,y> ...]")
+            return False
+        if cells:
+            nbt["pos"] = cells  # positional cells override any pos: in the nbt
+        struct = Structure.from_nbt(ident, nbt)
+        STRUCTURES.append(struct)
+        _save_map()
+        print(f"  created structure {struct} @ {struct.pos or '(no cell)'}")
+        return True
+    if sub not in ("delete", "modify"):
+        print("  usage: /structure <new|delete|modify|list> ...")
+        return False
+    if not arg:
+        print(f"  usage: /structure {sub} <structure>{{nbt}} ...")
+        return False
+    try:
+        ident, filt, ops = parse_item_text(arg)
+    except ValueError as error:
+        print(f"  parse error: {error}")
+        return False
+    matches = [s for s in STRUCTURES if _structure_matches(s, ident, filt)]
+    if not matches:
+        print(f"  no structure named '{ident}' matches")
+        return False
+    if sub == "delete":
+        chosen = _choose_structure(matches)
+        if chosen is None:
+            return False
+        STRUCTURES.remove(chosen)
+        _save_map()
+        print(f"  deleted structure {chosen} @ {chosen.pos}")
+        return True
+    if not ops:  # modify
+        print("  usage: /structure modify <structure>{nbt} <set|add|reset> <field> [{nbt}|value]")
+        return False
+    chosen = _choose_structure(matches)
+    if chosen is None:
+        return False
+    _apply_ops(chosen, ops)
+    _save_map()
+    print(f"  {chosen} @ {chosen.pos}")
+    return True
 
 
 def _map_bounds():
@@ -1827,22 +2501,77 @@ def _map_bounds():
     return (min(xs), max(xs), min(ys), max(ys)) if keys else (0, 0, 0, 0)
 
 
+RECOMMEND_FRESH = 0.2  # chance to roll a brand-new biome instead of echoing a neighbor (world diversity)
+
+
 def _map_recommend(x, y):
-    """Suggest a biome for a cell from its 4 orthogonal neighbors (most common) — biomes are
-    continuous, so a new cell usually matches its surroundings rather than rolling fresh."""
+    """Suggest a biome for a cell: WEIGHTED-RANDOM by its 4 orthogonal neighbors (so 2 forest +
+    2 jungle ≈ 50/50, biomes stay continuous), with a RECOMMEND_FRESH chance of a fresh biome.
+    On-the-spot random each call (not seeded), so re-rolling gives variety."""
     neighbors = []
     for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
         cell = MAP["cells"].get(f"{x + dx},{y + dy}")
         if cell and cell.get("biome"):
             neighbors.append(cell["biome"])
+    fresh_pool = [b for b in BIOME_ART if b != "default"]
     if not neighbors:
+        return random.choice(fresh_pool) if fresh_pool else None
+    if fresh_pool and random.random() < RECOMMEND_FRESH:
+        return random.choice(fresh_pool)
+    return random.choice(neighbors)  # frequency-weighted: duplicates in the list raise that biome's odds
+
+
+def _entity_pos(entity):
+    """An entity's map cell (x,y) or None. Players store it as nbt pos:{x,y}; mobs use flat x,y."""
+    pos = entity.nbt.get("pos")
+    if isinstance(pos, dict) and pos.get("x") is not None and pos.get("y") is not None:
+        return (int(pos["x"]), int(pos["y"]))
+    x, y = entity.nbt.get("x"), entity.nbt.get("y")
+    if x is not None and y is not None:
+        return (int(x), int(y))
+    return None
+
+
+def _set_entity_pos(entity, x, y):
+    """Write an entity's position (players: nbt pos:{x,y}; mobs keep their flat x,y if they use it)."""
+    if "x" in entity.nbt or "y" in entity.nbt:
+        entity.nbt["x"], entity.nbt["y"] = x, y
+    else:
+        entity.nbt["pos"] = {"x": x, "y": y}
+
+
+def _distance(a, b):
+    """Chebyshev distance (8-way, diagonals = 1) between two entities' cells, or None if either
+    has no position. distance = max(|dx|, |dy|)."""
+    pa, pb = _entity_pos(a), _entity_pos(b)
+    if pa is None or pb is None:
         return None
-    return max(set(neighbors), key=neighbors.count)
+    return max(abs(pa[0] - pb[0]), abs(pa[1] - pb[1]))
 
 
-def _cell_box(x, y):
+def _map_occupants():
+    """{(x,y): [names]} — every entity in WORLD that has a position (players are NOT a party;
+    they scatter, so the map shows each one where they actually are)."""
+    occupants = {}
+    for name, entity in WORLD.items():
+        cell = _entity_pos(entity)
+        if cell:
+            occupants.setdefault(cell, []).append(name)
+    return occupants
+
+
+def _entity_symbol(entity, default):
+    """The map glyph for an entity: its nbt `symbol` if set, else `default`. ANY string works
+    (incl. emoji), but a single narrow character keeps the box grid aligned — wide/emoji glyphs
+    are 2 columns and will nudge that cell's row."""
+    symbol = entity.nbt.get("symbol") if entity else None
+    return str(symbol) if symbol else default
+
+
+def _cell_box(x, y, focus=None, occupants=None):
     """The text lines (CELL_H + 2 tall) for one map cell as a box-drawn frame: coord in the top
-    border, biome label, then the biome's ASCII art. Empty coords render as a blank frame."""
+    border, biome label, then the biome's ASCII art. `focus` (x,y) marks ◆ (the viewed player);
+    cells with other entities get •. Empty coords render as a blank frame."""
     coord = f"({x},{y})"
     top = "╔" + coord + "═" * (CELL_W - len(coord)) + "╗"
     bottom = "╚" + "═" * CELL_W + "╝"
@@ -1850,7 +2579,15 @@ def _cell_box(x, y):
     if not cell:
         return [top] + ["║" + " " * CELL_W + "║"] * CELL_H + [bottom]
     biome = cell.get("biome") or "?"
-    marker = "◆" if [x, y] == MAP.get("pos") else ("*" if cell.get("name") else " ")
+    names_here = (occupants or {}).get((x, y))
+    if focus == (x, y):                                     # the focused player (their symbol, ◆ default)
+        marker = _entity_symbol(WORLD.get(names_here[0]) if names_here else None, "◆")
+    elif names_here:                                        # other entities here (their symbol, • default)
+        marker = _entity_symbol(WORLD.get(names_here[0]), "•")
+    elif cell.get("name"):
+        marker = "*"
+    else:
+        marker = " "
     label = (marker + biome)[:CELL_W].ljust(CELL_W)
     art = BIOME_ART.get(biome) or BIOME_ART.get("default") or []
     lines = [top, "║" + label + "║"]
@@ -1860,49 +2597,62 @@ def _cell_box(x, y):
     return lines + [bottom]
 
 
-def _map_render(anchor=None, rows_hint=None):
+def _map_render(anchor=None, rows_hint=None, focus=None, occupants=None):
     """Build the viewport lines (list of strings). `anchor` (x,y) = the top-left cell shown
-    (how you pan). Defaults to the map's min corner. Viewport size follows the terminal."""
+    (how you pan); with no anchor it centers on `focus` (the viewed player) if given, else the map's
+    min corner. `occupants` {(x,y):[names]} marks who stands where. Viewport size follows the terminal."""
     cells = MAP["cells"]
     if not cells:
-        return ["  (map is empty — /map add <x> <y> [biome])"]
+        return ["  (map is empty — /map new <x> <y> [biome])"]
     minx, maxx, miny, maxy = _map_bounds()
     cols, rows = shutil.get_terminal_size((80, 24))
     per_row = max(1, cols // (CELL_W + 2))
     per_col = max(1, ((rows_hint or rows) - 4) // (CELL_H + 2))
+    if anchor is None and focus is not None:           # center the viewport on the focused player
+        anchor = (focus[0] - per_row // 2, focus[1] - per_col // 2)
     ax, ay = anchor if anchor else (minx, miny)
     xs = list(range(ax, min(ax + per_row, maxx + 1)))
     ys = list(range(ay, min(ay + per_col, maxy + 1)))
     if not xs or not ys:
         return [f"  (nothing at ({ax},{ay}); map spans x {minx}..{maxx}, y {miny}..{maxy})"]
-    px, py = MAP.get("pos", [0, 0])
-    out = [f"  viewport ({xs[0]},{ys[0]})..({xs[-1]},{ys[-1]})  |  ◆ ({px},{py})  |  map x {minx}..{maxx} y {miny}..{maxy}"]
-    named = []
+    head = [f"viewport ({xs[0]},{ys[0]})..({xs[-1]},{ys[-1]})"]
+    if focus is not None:
+        head.append(f"◆ ({focus[0]},{focus[1]})")
+    head.append(f"map x {minx}..{maxx} y {miny}..{maxy}")
+    out = ["  " + "  |  ".join(head)]
+    listing = []
     for y in ys:
-        boxes = [_cell_box(x, y) for x in xs]
+        boxes = [_cell_box(x, y, focus, occupants) for x in xs]
         for r in range(CELL_H + 2):
             out.append("  " + "".join(box[r] for box in boxes))
         for x in xs:
             cell = cells.get(f"{x},{y}")
             if cell and cell.get("name"):
-                named.append(f"    ({x},{y}) {cell['name']} — {cell.get('biome', '?')}")
-    return out + named
+                listing.append(f"    ({x},{y}) {cell['name']} — {cell.get('biome', '?')}")
+            who = (occupants or {}).get((x, y))
+            if who:
+                tagged = ", ".join(f"{_entity_symbol(WORLD.get(n), '•')} {n}" for n in who)
+                listing.append(f"    ({x},{y}) {tagged}")
+    return out + listing
 
 
-def _map_view(anchor=None):
-    print("\n".join(_map_render(anchor)))
+def _map_view(anchor=None, focus=None, occupants=None):
+    print("\n".join(_map_render(anchor, focus=focus, occupants=occupants)))
 
 
-def _map_interactive(anchor=None):
+def _map_interactive(anchor=None, focus=None, occupants=None):
     """Live viewer: arrow keys pan cell-by-cell, q or :done exits. Needs a real terminal —
     falls back to a one-shot static render when stdin isn't a TTY (piped/scripted)."""
     if not sys.stdin.isatty():
-        _map_view(anchor)
+        _map_view(anchor, focus, occupants)
         return True
     import termios
     import tty
     import select
     minx, maxx, miny, maxy = _map_bounds()
+    if anchor is None and focus is not None:
+        cols, rows = shutil.get_terminal_size((80, 24))
+        anchor = (focus[0] - max(1, cols // (CELL_W + 2)) // 2, focus[1] - max(1, (rows - 4) // (CELL_H + 2)) // 2)
     ax, ay = anchor if anchor else (minx, miny)
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -1911,11 +2661,11 @@ def _map_interactive(anchor=None):
         while True:
             ax = max(minx, min(ax, maxx))
             ay = max(miny, min(ay, maxy))
-            frame = _map_render((ax, ay)) + ["", "  arrows pan · q or :done to exit"]
+            frame = _map_render((ax, ay), focus=focus, occupants=occupants) + ["", "  arrows pan · q / Enter / :done to exit"]
             sys.stdout.write("\033[2J\033[H" + "\r\n".join(frame) + "\r\n")
             sys.stdout.flush()
             ch = sys.stdin.read(1)
-            if ch in ("q", "\x03", "\x04"):  # q / Ctrl-C / Ctrl-D
+            if ch in ("q", "\x03", "\x04", "\r", "\n"):  # q / Ctrl-C / Ctrl-D / Enter
                 break
             if ch == ":":  # read the rest of a :word (cooked-ish) and exit on :done/:q
                 word = ""
@@ -1939,13 +2689,15 @@ def _map_interactive(anchor=None):
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
         sys.stdout.write("\033[2J\033[H")
         sys.stdout.flush()
-    _map_view((ax, ay))  # leave the final frame in the scrollback
+    _map_view((ax, ay), focus, occupants)  # leave the final frame in the scrollback
     return True
 
 
 def cmd_map(rest):
-    """/map [view [x y]]           show the biome grid (box cells); x y = pan the viewport's corner
-       /map pos <x> <y>            set the party's current cell (the ◆ marker)
+    """/map [view [<player>] [x y]]   show the biome grid; a <player> focuses ◆ on them (centers
+                                       the view); every positioned entity shows as •. x y pans.
+       /map pos <player> <x> <y>    set a PLAYER's position (nbt pos:{x,y}) — players aren't a party
+       /map pos <x> <y>             set the legacy global marker (MAP['pos'])
        /map get <x> <y>            a cell's full info
        /map set <x> <y> <biome>|{nbt}   create/update a cell
        /map new <x> <y> [biome]    create a cell (biome auto-recommended from neighbors if omitted)
@@ -1953,19 +2705,39 @@ def cmd_map(rest):
     parts = rest.split()
     sub = parts[0] if parts else "view"
     if sub in ("view", "show"):
-        anchor = None
-        if len(parts) >= 3 and parts[1].lstrip("-").isdigit() and parts[2].lstrip("-").isdigit():
-            anchor = (int(parts[1]), int(parts[2]))
-        _map_interactive(anchor)  # arrow-key pan in a real terminal; static print when piped
+        anchor, focus, occupants = None, None, _map_occupants()
+        nums = [int(t) for t in parts[1:] if t.lstrip("-").isdigit()]
+        names = [t for t in parts[1:] if not t.lstrip("-").isdigit()]
+        if len(nums) >= 2:
+            anchor = (nums[0], nums[1])
+        if names:  # focus on a named player
+            entity = WORLD.get(names[0])
+            if entity is None:
+                print(f"  no character '{names[0]}'")
+                return False
+            focus = _entity_pos(entity)
+            if focus is None:
+                print(f"  {names[0]} has no position — set it with /map pos {names[0]} <x> <y>")
+        _map_interactive(anchor, focus, occupants)  # arrow-key pan in a real terminal; static when piped
         return True
     if sub == "pos":
-        if len(parts) >= 3 and parts[1].lstrip("-").isdigit() and parts[2].lstrip("-").isdigit():
-            MAP["pos"] = [int(parts[1]), int(parts[2])]
-            _save_map()
-            print(f"  position set to ({parts[1]},{parts[2]})")
+        named = [t for t in parts[1:] if not t.lstrip("-").isdigit()]
+        nums = [int(t) for t in parts[1:] if t.lstrip("-").isdigit()]
+        if named and len(nums) >= 2:  # set a player's position
+            entity = WORLD.get(named[0])
+            if entity is None:
+                print(f"  no character '{named[0]}'")
+                return False
+            entity.nbt["pos"] = {"x": nums[0], "y": nums[1]}
+            print(f"  {named[0]} is now at ({nums[0]},{nums[1]})")
             return True
-        print(f"  position is ({MAP.get('pos', [0, 0])[0]},{MAP.get('pos', [0, 0])[1]})  —  /map pos <x> <y> to move")
-        return MAP.get("pos")
+        if len(nums) >= 2:  # legacy global marker
+            MAP["pos"] = [nums[0], nums[1]]
+            _save_map()
+            print(f"  global marker set to ({nums[0]},{nums[1]})")
+            return True
+        print("  usage: /map pos <player> <x> <y>   (or  /map pos <x> <y>  for the global marker)")
+        return False
     if sub == "add":
         return _add_renamed("map")
     if sub in ("get", "set", "new", "recommend") and len(parts) >= 3 and parts[1].lstrip("-").isdigit() and parts[2].lstrip("-").isdigit():
@@ -2031,10 +2803,10 @@ def _apply_template(mob, species):
         return False
     mob.modify(**template.get("nbt", {}))
     for stat, value in {**template.get("attributes", {}), **template.get("stats", {})}.items():
-        mob.stats.set(stat, value)  # attributes folded into the one stat namespace
+        mob.stat.set(stat, value)  # attributes folded into the one stat namespace
     for ability_text in template.get("abilities", []):
         try:
-            mob.abilities.add(Ability.from_nbt(*parse_item_text(ability_text)[:2]))
+            mob.ability.add(Ability.from_nbt(*parse_item_text(ability_text)[:2]))
         except ValueError:
             pass
     return True
@@ -2163,12 +2935,119 @@ def _collection_command(rest, container_attr, element_cls, cmd_name):
     return False
 
 
+# --- /quest (character-held quests with rewards + expiry) --------------------
+
+def cmd_quest(rest):
+    """/quest new <selector> <quest>{nbt} [turns_to_expire]   give a quest (pulses quest_obtained)
+       /quest complete <selector> <quest>      run its reward (@s=owner) + pulse quest_complete, drop it
+       /quest modify <selector> <quest> <set|add|reset> <field> [{nbt}|value]
+       /quest delete <selector> <quest> [true]    drop it; true also pulses quest_failed (no reward)
+       /quest list <selector>
+    `reward` is a Reaction (deltas and/or /function names). `expiration` counts down on the owner's
+    turns; at 0 it auto-fails (pulses quest_failed)."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    if sub == "list":
+        out = []
+        for name, player in targets:
+            quests = list(player.quest)
+            shown = ", ".join(_quest_label(q) for q in quests) if quests else "(none)"
+            print(f"  {name}.quest: {shown}")
+            out.append([q.name for q in quests])
+        return out[0] if len(out) == 1 else out
+    if sub == "new":
+        if not remainder:
+            print("  usage: /quest new <selector> <quest>{nbt} [turns_to_expire]")
+            return False
+        try:
+            ident, nbt, trailing = parse_item_text(remainder)
+        except ValueError as error:
+            print(f"  parse error: {error}")
+            return False
+        if trailing:
+            if re.fullmatch(r"-?\d+", trailing):
+                nbt["expiration"] = int(trailing)  # the positional [turns] overrides
+            else:
+                print(f"  (ignored trailing '{trailing}' — [turns_to_expire] must be a whole number)")
+        for name, player in targets:
+            quest = Quest.from_nbt(ident, dict(nbt))
+            player.quest.add(quest)
+            print(f"  {name}: obtained quest {quest}")
+            _flag_path_issues(player, quest)  # flag missing reward functions
+            _report_fired(name, _pulse_procs(player, ["quest_obtained"]))
+        return True
+    # complete / modify / delete address an EXISTING quest by name
+    head = re.match(r"^([^\s{]+)\s*(.*)$", remainder, re.DOTALL)
+    if not head or not head.group(1):
+        print(f"  usage: /quest {sub or '<sub>'} <selector> <quest> ...")
+        return False
+    ident, ops = head.group(1), head.group(2).strip()
+    ok = False
+    for name, player in targets:
+        quest = player.quest.get(ident)
+        if quest is None:
+            print(f"  {name} has no quest '{ident}'")
+            continue
+        if sub == "complete":
+            applied = _apply_reaction(player, quest.reward, origin=player) if isinstance(quest.reward, Reaction) else []
+            player.quest.remove(quest)
+            detail = f" (reward: {', '.join(applied)})" if applied else ""
+            print(f"  {name}: completed quest '{ident}'{detail}")
+            _report_fired(name, _pulse_procs(player, ["quest_complete"]))
+            ok = True
+        elif sub == "delete":
+            failed = ops.strip().lower() in ("true", "1", "yes")
+            player.quest.remove(quest)
+            print(f"  {name}: deleted quest '{ident}'" + (" -> quest_failed" if failed else " (silent)"))
+            if failed:
+                _report_fired(name, _pulse_procs(player, ["quest_failed"]))
+            ok = True
+        elif sub == "modify":
+            if not ops:
+                print("  usage: /quest modify <selector> <quest> <set|add|reset> <field> [{nbt}|value]")
+                continue
+            _apply_ops(quest, ops)
+            print(f"  {name}: {quest}")
+            _flag_path_issues(player, quest)
+            ok = True
+        else:
+            print("  usage: /quest <new|complete|modify|delete|list> <selector> <quest> ...")
+            return False
+    return ok
+
+
+def _quest_label(quest):
+    """'slay_dragon (3t)' — append the remaining expiry when set."""
+    exp = quest.expiration
+    return f"{quest.name} ({exp}t)" if isinstance(exp, int) and not isinstance(exp, bool) else quest.name
+
+
+def _tick_quests(player):
+    """One of the owner's turns passes: count each quest's expiration down; at 0 it auto-fails
+    (removed + pulse 'quest_failed'). Quests with no expiration (None) are untouched."""
+    for quest in list(player.quest):
+        exp = quest.expiration
+        if not isinstance(exp, int) or isinstance(exp, bool):
+            continue
+        exp -= 1
+        if exp <= 0:
+            player.quest.remove(quest)
+            print(f"    {player.name}: quest '{quest.name}' expired -> quest_failed")
+            _report_fired(player.name, _pulse_procs(player, ["quest_failed"]))
+        else:
+            quest.expiration = exp
+
+
 def cmd_talent(rest):
-    return _collection_command(rest, "talents", Talent, "talent")
+    return _collection_command(rest, "talent", Talent, "talent")
 
 
 def cmd_effect(rest):
-    return _collection_command(rest, "effects", Effect, "effect")
+    return _collection_command(rest, "effect", Effect, "effect")
 
 
 def _resolve_path(player, path):
@@ -2179,7 +3058,7 @@ def _resolve_path(player, path):
        talents/abilities/effects.<name>.<field>
     Returns None if it can't resolve."""
     parts = path.split(".")
-    head = "stats" if parts[0] == "attributes" else parts[0]  # attributes folded into stats (alias)
+    head = _canon_container(parts[0])  # stats/attributes -> stat, etc. (singular containers)
     container = getattr(player, head, None)
     if container is None:
         return None
@@ -2189,7 +3068,7 @@ def _resolve_path(player, path):
             key = rest[0]
             return (lambda: container.get(key), lambda v: container.__setitem__(key, v))
         return None
-    if head == "stats" and len(rest) == 1:  # the value container
+    if head == "stat" and len(rest) == 1:  # the value container
         key = rest[0]
         return (lambda: container.get(key), lambda v: container.set(key, v))
     if len(rest) == 2 and hasattr(container, "get"):  # member.field (items, talents, ...)
@@ -2240,7 +3119,7 @@ def _ability_cast(arg):
         return False
     ok = False
     for caster_name, caster in casters:
-        ability = caster.abilities.get(ident)
+        ability = caster.ability.get(ident)
         if ability is None:
             print(f"  {caster_name} has no ability '{ident}'")
             continue
@@ -2275,7 +3154,7 @@ def _ability_cast(arg):
         print(f"  {caster_name}: cast {ability.name}" + (f" ({'; '.join(detail)})" if detail else "")
               + (f" -> {', '.join(n for n, _ in hit_targets)}" if target_sel else ""))
         for tname, target in hit_targets:
-            applied = _apply_reaction(target, ability.on_hit)  # @s = target inside on_hit
+            applied = _apply_reaction(target, ability.on_hit, origin=caster)  # @s = target, @o = caster
             if applied:
                 print(f"    on_hit {tname}: {', '.join(applied)}")
         ok = True
@@ -2286,31 +3165,37 @@ def cmd_ability(rest):
     sub = rest.split(None, 1)[0] if rest.split() else ""
     if sub == "cast":
         return _ability_cast(rest.partition(" ")[2])
-    return _collection_command(rest, "abilities", Ability, "ability")
+    return _collection_command(rest, "ability", Ability, "ability")
 
 
 # --- /proc (signals that fire talents) ---------------------------------------
 
-def _run_function(name, owner):
-    """Run a /function's body lines with @s (SELF) bound to `owner`. Returns True if it ran."""
+def _run_function(name, owner, origin=_INHERIT):
+    """Run a /function's body lines with @s (SELF) bound to `owner`. `origin` sets @o (the cause):
+    pass an entity to bind it, or leave it as _INHERIT to keep the caller's @o (so a plain sub-call
+    carries the same cause through the chain). Returns True if it ran."""
     body = FUNCTIONS.get(name)
     if body is None:
         return False
-    global SELF
-    prev, SELF = SELF, owner
-    HISTORY.append(f"{owner.name}: {name}")  # session history: what function ran, for whom
+    global SELF, ORIGIN
+    prev_self, SELF = SELF, owner
+    prev_origin = ORIGIN
+    if origin is not _INHERIT:
+        ORIGIN = origin
+    _log(f"function '{name}' run (@s={owner.name if owner else '—'}, @o={ORIGIN.name if ORIGIN else '—'})")
     try:
         for line in body:
             dispatch(line)
     finally:
-        SELF = prev
+        SELF, ORIGIN = prev_self, prev_origin
     return True
 
 
-def _apply_reaction(player, reaction):
+def _apply_reaction(player, reaction, origin=_INHERIT):
     """Apply a Reaction to the owner. Each action is a class-path delta (negative = damage/spend;
     paths can reach item fields, e.g. inventory.rope.count(-1)) OR a /function call run with
-    @s = the owner. Returns a list of change descriptions."""
+    @s = the owner. `origin` sets @o (the cause) inside any function actions — e.g. the attacker on
+    an on_hit, the caster of an ability. Returns a list of change descriptions."""
     if not isinstance(reaction, Reaction):
         return []
     applied = []
@@ -2327,7 +3212,7 @@ def _apply_reaction(player, reaction):
             applied.append(f"{path}{amount:+}")
         else:  # ("func", name)
             name = action[1]
-            if _run_function(name, player):
+            if _run_function(name, player, origin):
                 applied.append(f"fn:{name}")
             else:
                 applied.append(f"fn:{name}?(missing)")
@@ -2338,26 +3223,60 @@ def _fire_talents(player):
     """Fire every talent whose proc conditions match the player's current proc-state.
     Returns a list of (talent_name, applied_changes). Sets SELF=player for the duration so
     @s (self) resolves to the proc owner inside reactions/functions."""
-    global SELF
+    global SELF, ORIGIN
     prev_self, SELF = SELF, player
+    prev_origin, ORIGIN = ORIGIN, player  # a self-procced talent's cause is its owner (@o = @s here)
     try:
         fired = []
-        for talent in player.talents:
+        for talent in player.talent:
             if isinstance(talent.proc, Proc) and talent.proc.matches(player.proc_state):
-                fired.append((talent.name, _apply_reaction(player, talent.reaction)))
+                fired.append((talent.name, _apply_reaction(player, talent.reaction, origin=player)))
         return fired
     finally:
-        SELF = prev_self
+        SELF, ORIGIN = prev_self, prev_origin
 
 
 def _pulse_procs(player, names):
-    """Momentary signal: turn names on, fire matching talents, then revert (reactions persist)."""
+    """Momentary signal: turn names on, fire matching talents, then revert (reactions persist).
+    Each name may be bare ('is_poisoned' -> True) or carry a bool ('is_poisoned:true',
+    'scared:false') — the ':bool' sets the SIGNAL's value, not part of the key (so it matches a
+    talent proc written {is_poisoned:true})."""
     prior = dict(player.proc_state)
-    for proc_name in names:
-        player.proc_state[proc_name] = True
+    for token in names:
+        key, sep, val = token.partition(":")
+        player.proc_state[key.strip()] = (val.strip().lower() not in ("false", "0", "no", "")) if sep else True
     fired = _fire_talents(player)
     player.proc_state = prior
     return fired
+
+
+def _proc_tokens(value):
+    """Split an nbt proc field ('a,b' / 'a b' / list) into a list of signal-name tokens."""
+    if isinstance(value, str):
+        return [s.strip() for s in re.split(r"[,\s]+", value) if s.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(s) for s in value]
+    return []
+
+
+def _signal_value(token):
+    """('is_poisoned' -> ('is_poisoned', True)); ('scared:false' -> ('scared', False))."""
+    key, sep, val = token.partition(":")
+    return key.strip(), ((val.strip().lower() not in ("false", "0", "no", "")) if sep else True)
+
+
+def _enable_procs(player, names):
+    """Sticky ON (like /proc enable): set the signals and fire matching talents. Returns fired list."""
+    for token in names:
+        key, value = _signal_value(token)
+        player.proc_state[key] = value
+    return _fire_talents(player)
+
+
+def _disable_procs(player, names):
+    """Sticky OFF (like /proc disable): clear the signals."""
+    for token in names:
+        player.proc_state.pop(_signal_value(token)[0], None)
 
 
 def _report_fired(name, fired):
@@ -2389,15 +3308,21 @@ def cmd_proc(rest):
     if not names:
         print(f"  usage: /proc {mode} <selector> <proc,proc,...>")
         return False
+    # a signal token may carry a bool: 'is_poisoned:true' / 'scared:false' / bare 'is_poisoned' (=True).
+    # The ':bool' sets the signal VALUE, not part of the key (so it matches a proc written {name:true}).
+    def _signal(token):
+        key, sep, val = token.partition(":")
+        return key.strip(), ((val.strip().lower() not in ("false", "0", "no", "")) if sep else True)
     for name, player in targets:
         if mode == "disable":
             for proc_name in names:
-                player.proc_state.pop(proc_name, None)
+                player.proc_state.pop(_signal(proc_name)[0], None)
             print(f"  {name}: disabled {', '.join(names)}")
             continue
         prior = dict(player.proc_state)
         for proc_name in names:
-            player.proc_state[proc_name] = True
+            key, value = _signal(proc_name)
+            player.proc_state[key] = value
         fired = _fire_talents(player)
         if mode == "pulse":
             player.proc_state = prior  # momentary: revert the signals (reactions persist)
@@ -2411,9 +3336,89 @@ def cmd_proc(rest):
 VARS = {}  # name -> stored value, text-substituted into later commands
 
 
+def _roll(sides):
+    """A single die roll, 1..sides inclusive (sides < 1 -> 0)."""
+    return random.randint(1, sides) if sides >= 1 else 0
+
+
+def cmd_random(rest):
+    """/random range <min>..<max>   roll one integer in [min, max] inclusive (Minecraft-style).
+    Unlike bare 'd20' (which returns a LIST of rolls), /random returns ONE number — so it captures
+    cleanly:  /execute store result var $(x)->int run random range 1..20
+              /data result $(x)->int run random range 1..20
+    'range' is a subcommand so /random can grow other modes later. A bare '<n>' (no '..') = 1..n."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    if sub != "range" or not arg:
+        print("  usage: /random range <min>..<max>   (e.g. /random range 1..20)")
+        return False
+    lo_s, sep, hi_s = arg.partition("..")
+    if not sep:                       # a lone number means 1..n
+        lo_s, hi_s = "1", lo_s
+    lo_s, hi_s = lo_s.strip(), hi_s.strip()
+    if not (lo_s.lstrip("-").isdigit() and hi_s.lstrip("-").isdigit()):
+        print("  usage: /random range <min>..<max>   (e.g. /random range 1..20)")
+        return False
+    lo, hi = int(lo_s), int(hi_s)
+    if lo > hi:
+        lo, hi = hi, lo  # tolerate reversed bounds
+    value = random.randint(lo, hi)
+    print(f"  rolled {value}  ({lo}..{hi})")
+    return value
+
+
+def _eval_token(inner):
+    """Evaluate one $(...) token to text. `inner` may be:
+       dN              -> a die roll (1..N)
+       @s / @p / @a..  -> the matching entity NAME(s)  (e.g. $(@s) -> 'isleia')
+       a dotted path   -> that value  ($(@s.stat.health))
+       a var name      -> its stored value             ($(hp))
+    Unknown var names are left as literal $(name) (so a not-yet-set var is obvious)."""
+    inner = inner.strip()
+    die = re.fullmatch(r"d(\d+)", inner)
+    if die:
+        return str(_roll(int(die.group(1))))
+    if "." in inner:                                # a path -> its value ($(@s.stat.health), name.x)
+        try:
+            return str(_operand_value(inner))
+        except Exception:
+            return inner
+    if inner.startswith("@"):                       # bare selector -> entity name(s)
+        try:
+            targets = _resolved(inner)
+            if targets:
+                return ", ".join(n for n, _ in targets)
+        except Exception:
+            pass
+        return inner
+    return str(VARS.get(inner, "$(" + inner + ")"))  # var; unknown stays literal
+
+
 def _substitute(text):
-    """Replace $(name) with the stored value; unknown $(name) is left untouched."""
-    return re.sub(r"\$\((\w+)\)", lambda m: str(VARS.get(m.group(1), m.group(0))), text)
+    """Quote-aware text substitution. Inside double-quotes everything is LITERAL ("d20" -> d20,
+    "$(@s)" -> $(@s)). Outside quotes, $(...) tokens are evaluated (see _eval_token) and bare dice
+    dN roll. ($() is the substitution sigil rather than {braces} because {…} already means NBT.)"""
+    out, plain, i, n = [], [], 0, len(text)
+
+    def flush():
+        seg = re.sub(r"\$\(([^)]*)\)", lambda m: _eval_token(m.group(1)), "".join(plain))
+        seg = re.sub(r"\bd(\d+)\b", lambda m: str(_roll(int(m.group(1)))), seg)
+        plain.clear()
+        out.append(seg)
+
+    while i < n:
+        if text[i] == '"':                          # copy a quoted run verbatim (no substitution)
+            flush()
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 1
+            out.append(text[i:min(j + 1, n)])
+            i = min(j + 1, n)
+        else:
+            plain.append(text[i])
+            i += 1
+    flush()
+    return "".join(out)
 
 
 def _var_name(token):
@@ -2547,18 +3552,20 @@ def _print_function(path, lines):
         print(f"    {i:>2}  {line}")
 
 
-EDITOR_META = ":list  :del N  :ins N <command>  :move A B  :done  :cancel  :help"  # one source of truth
+EDITOR_META = ":list  :del N  :ins N <command>  :move A B  :swap A B  :done  :cancel  :help"  # one source of truth
 
 
 def _function_editor(path):
     """In-REPL line editor for a function body. Normal command lines (with live TAB autofill)
     are appended; ':'-prefixed meta-commands edit the buffer. Doubles as create."""
+    global PROMPT
     lines = list(FUNCTIONS.get(path, []))
     print(f"  editing function '{path}' — {len(lines)} line(s)" + (" (new)" if path not in FUNCTIONS else ""))
     print(f"  type command lines (TAB completes). meta: {EDITOR_META}")
     while True:
         try:
-            raw = input(f"  {path}:{len(lines) + 1}> ").strip()
+            PROMPT = f"  {path}:{len(lines) + 1}> "  # so the completion-listing redraw uses THIS prompt
+            raw = input(PROMPT).strip()
         except (EOFError, KeyboardInterrupt):
             print("\n  (cancelled — not saved)")
             return False
@@ -2601,6 +3608,16 @@ def _function_editor(path):
                     b = max(0, min(int(nums[1]) - 1, len(lines) - 1))
                     lines.insert(b, lines.pop(a))
                     print(f"  moved [{a + 1}] -> [{b + 1}]")
+        elif meta in ("swap", "sw"):
+            nums = raw[1:].split()[1:]
+            if len(nums) != 2 or not all(n.lstrip("-").isdigit() for n in nums):
+                print("  usage: :swap <line#> <line#>")
+            else:
+                a = _editor_index([nums[0]], lines)
+                b = _editor_index([nums[1]], lines) if a is not None else None
+                if a is not None and b is not None:
+                    lines[a], lines[b] = lines[b], lines[a]
+                    print(f"  swapped [{a + 1}] <-> [{b + 1}]")
         else:
             print(f"  unknown editor command ':{meta}'  (try :help)")
 
@@ -2617,13 +3634,18 @@ def _editor_index(args, lines):
     return None
 
 
-def _function_execute(path, selector):
-    """Run a function's lines for each target, with @s (self) bound to that target so the
-    body's @s references resolve to the entity it's being run on."""
+def _function_execute(path, selector=None):
+    """Run a function's lines. With a selector, @s (self) binds to each target. WITHOUT one, it
+    INHERITS the caller's @s (SELF) — so a function calling another function carries @s through,
+    Minecraft-style. At top level SELF is None, so a no-@s function (e.g. world setup) still runs."""
     body = FUNCTIONS.get(path)
     if body is None:
         print(f"  no function '{path}'")
         return False
+    if not selector:
+        _run_function(path, SELF)  # inherit caller's @s (None at top level)
+        print(f"  ran '{path}'" + (f" (@s={SELF.name})" if SELF else ""))
+        return True
     targets = _resolved(selector)
     if targets is None:
         return False
@@ -2646,10 +3668,10 @@ def cmd_function(rest):
         return _function_editor(arg.split()[0])
     if sub in ("run", "execute"):  # 'run' is the name; 'execute' kept as a quiet alias
         path, _, sel = arg.partition(" ")
-        if not path.strip() or not sel.strip():
-            print("  usage: /function run <path> <selector>")
+        if not path.strip():
+            print("  usage: /function run <path> [selector]   (selector optional — omit if it has no @s)")
             return False
-        return _function_execute(path.strip(), sel.strip())
+        return _function_execute(path.strip(), sel.strip() or None)
     if sub == "list":
         if not FUNCTIONS:
             print("  (no functions yet)")
@@ -2698,13 +3720,15 @@ def _player_to_dict(p):
         "name": p.name,
         "inventory_slots": p.inventory.slots,
         "nbt": {k: _jsonable(v) for k, v in p.nbt.items()},
-        "stats": {s.name: _jsonable(s.value) for s in p.stats},
-        "formulas": {n: str(p.formulas.get(n)) for n in p.formulas},
+        "stats": {s.name: _jsonable(s.value) for s in p.stat},
+        "formulas": {n: str(p.formula.get(n)) for n in p.formula},
         "proc_state": dict(p.proc_state),
         "items": [repr(it) for it in p.inventory.items],
-        "talents": [repr(t) for t in p.talents],
-        "abilities": [repr(a) for a in p.abilities],
-        "effects": [{"repr": repr(e), "elapsed": e._elapsed, "total": e._total} for e in p.effects],
+        "equipment": {slot: [repr(it) for it in items] for slot, items in p.equipment.equipped().items()},
+        "talents": [repr(t) for t in p.talent],
+        "abilities": [repr(a) for a in p.ability],
+        "effects": [{"repr": repr(e), "elapsed": e._elapsed, "total": e._total} for e in p.effect],
+        "quests": [repr(q) for q in p.quest],
     }
 
 
@@ -2714,28 +3738,36 @@ def _player_from_dict(d):
     p = cls(d["name"], inventory_slots=d.get("inventory_slots"))
     p.nbt = {k: _unjson(v) for k, v in nbt.items()}
     for name, value in d.get("stats", {}).items():
-        p.stats.set(name, _unjson(value))
+        p.stat.set(name, _unjson(value))
     for name, value in d.get("attributes", {}).items():  # legacy sessions: fold attributes into stats
-        p.stats.set(name, _unjson(value))
-    for name in list(p.formulas):           # drop the default formulas, restore the saved set
-        p.formulas.remove(name)
+        p.stat.set(name, _unjson(value))
+    for name in list(p.formula):           # drop the default formulas, restore the saved set
+        p.formula.remove(name)
     for name, expr in d.get("formulas", {}).items():
-        p.formulas.add(name, expr)
+        p.formula.add(name, expr)
     p.proc_state = dict(d.get("proc_state", {}))
     p.inventory.items = [Item.from_nbt(*parse_item_text(r)[:2]) for r in d.get("items", [])]
+    for slot, reprs in d.get("equipment", {}).items():  # restore equipped gear (capacity from equip_slots nbt)
+        p.equipment.define_slot(slot, _equip_capacity(p, slot) or len(reprs))
+        for r in reprs:
+            p.equipment.equip(slot, Item.from_nbt(*parse_item_text(r)[:2]))
     for r in d.get("talents", []):
-        p.talents.add(Talent.from_nbt(*parse_item_text(r)[:2]))
+        p.talent.add(Talent.from_nbt(*parse_item_text(r)[:2]))
     for r in d.get("abilities", []):
-        p.abilities.add(Ability.from_nbt(*parse_item_text(r)[:2]))
+        p.ability.add(Ability.from_nbt(*parse_item_text(r)[:2]))
     for e in d.get("effects", []):
         effect = Effect.from_nbt(*parse_item_text(e["repr"])[:2])
         effect._elapsed, effect._total = e.get("elapsed", 0), e.get("total")
-        p.effects.add(effect)
+        p.effect.add(effect)
+    for r in d.get("quests", []):
+        p.quest.add(Quest.from_nbt(*parse_item_text(r)[:2]))
     return p
 
 
 def _session_to_dict():
     return {
+        "id": SESSION_ID,
+        "name": SESSION_NAME,
         "turn": TURN,
         "turn_active": TURN_ACTIVE,
         "weather": {"by_unit": dict(WEATHER_BY_UNIT), "turn": WEATHER_TURN,
@@ -2773,37 +3805,68 @@ def _session_from_dict(data):
     HISTORY.extend(data.get("history", []))
 
 
+def _session_meta():
+    """Map saved id -> friendly name (None if unnamed), read from each session file's header."""
+    meta = {}
+    for sid in _saved_session_ids():
+        try:
+            with open(_session_path(sid)) as handle:
+                meta[sid] = json.load(handle).get("name")
+        except (OSError, ValueError):
+            meta[sid] = None
+    return meta
+
+
+def _resolve_session(arg):
+    """An id (4-digit) or a friendly name -> the saved session id, or None."""
+    arg = arg.strip()
+    if arg.isdigit() and int(arg) in _saved_session_ids():
+        return int(arg)
+    for sid, name in _session_meta().items():  # match by friendly name
+        if name and name == arg:
+            return sid
+    return None
+
+
 def cmd_session(rest):
-    """/session save <name> | load <name> | get | history | list"""
-    global SESSION
+    """/session save [name]   save to sessions/<id>.json (id = this session's port); name is optional
+       /session load <id|name>   load by 4-digit id or friendly name
+       /session get | id | history | list
+    The session id doubles as the UI port — open http://localhost:<id>."""
+    global SESSION_ID, SESSION_NAME
     sub, _, arg = rest.partition(" ")
     sub, arg = sub.strip(), arg.strip()
     if sub == "save":
-        if not arg:
-            print("  usage: /session save <name>")
-            return False
+        sid = _ensure_session_id()
+        if arg:
+            SESSION_NAME = arg  # optional friendly name (stored inside the file)
         os.makedirs(SESSION_DIR, exist_ok=True)
-        with open(_session_path(arg), "w") as handle:
+        with open(_session_path(sid), "w") as handle:
             json.dump(_session_to_dict(), handle, indent=2)
-        SESSION = arg
-        print(f"  saved session '{arg}' -> {_session_path(arg)}  ({len(WORLD)} characters)")
-        return True
+        label = f" '{SESSION_NAME}'" if SESSION_NAME else ""
+        print(f"  saved session {sid}{label} -> {_session_path(sid)}  ({len(WORLD)} characters)")
+        print(f"  UI: http://localhost:{sid}")
+        return sid
     if sub == "load":
         if not arg:
-            print("  usage: /session load <name>")
+            print("  usage: /session load <id|name>")
             return False
-        path = _session_path(arg)
-        if not os.path.exists(path):
-            print(f"  no saved session '{arg}' (looked in {path})")
+        sid = _resolve_session(arg)
+        if sid is None:
+            print(f"  no saved session '{arg}' (try /session list)")
             return False
-        with open(path) as handle:
-            _session_from_dict(json.load(handle))
-        SESSION = arg
-        print(f"  loaded session '{arg}'  ({len(WORLD)} characters, world turn {TURN})")
-        return True
-    if sub == "get":
-        print(f"  current session: {SESSION}" if SESSION else "  no session loaded")
-        return SESSION
+        with open(_session_path(sid)) as handle:
+            loaded = json.load(handle)
+        _session_from_dict(loaded)
+        SESSION_ID, SESSION_NAME = sid, loaded.get("name")
+        label = f" '{SESSION_NAME}'" if SESSION_NAME else ""
+        print(f"  loaded session {sid}{label}  ({len(WORLD)} characters, world turn {TURN})")
+        return sid
+    if sub in ("get", "id"):
+        sid = _ensure_session_id()
+        label = f" '{SESSION_NAME}'" if SESSION_NAME else ""
+        print(f"  session {sid}{label}  —  http://localhost:{sid}")
+        return sid
     if sub == "history":
         if not HISTORY:
             print("  (history is empty)")
@@ -2812,15 +3875,19 @@ def cmd_session(rest):
             print(f"  {line}")
         return list(HISTORY)
     if sub == "list":
-        saved = sorted(f[:-5] for f in os.listdir(SESSION_DIR) if f.endswith(".json")) if os.path.isdir(SESSION_DIR) else []
-        print("  saved sessions: " + (", ".join(saved) or "(none)"))
-        return saved
-    print("  usage: /session <save|load|get|history|list> [name]")
+        meta = _session_meta()
+        if not meta:
+            print("  saved sessions: (none)")
+            return []
+        for sid in sorted(meta):
+            print(f"  {sid}" + (f"  '{meta[sid]}'" if meta[sid] else ""))
+        return sorted(meta)
+    print("  usage: /session <save|load|get|id|history|list> [name]")
     return False
 
 
-def _session_path(name):
-    return os.path.join(SESSION_DIR, name + ".json")
+def _session_path(sid):
+    return os.path.join(SESSION_DIR, f"{sid}.json")
 
 
 # --- /execute (conditional command execution) --------------------------------
@@ -2832,7 +3899,7 @@ COMPARATORS = {
 
 
 def _operand_value(token):
-    """Resolve an /execute operand: a dotted PATH (@s.stats.health, @p.x, name.attributes.y)
+    """Resolve an /execute operand: a dotted PATH (@s.stat.health, @p.x, name.attributes.y)
     -> that value; otherwise a literal (number/string). $(vars) are already substituted."""
     token = token.strip()
     if "." in token and not re.fullmatch(r"-?\d+\.\d+", token):  # a path, not a plain float
@@ -2899,7 +3966,7 @@ def cmd_execute(rest):
       store result|success <target>   capture the command's return value / 1|0 into:
           var $(name)[->cast]          a $() variable     (same as /data result|success)
           entity <selector> <path>     an entity's stats.X / attributes.X / nbt.X
-    <left>/<right> are paths (@s.stats.health) or literals; <operator> is > < >= <= = != .
+    <left>/<right> are paths (@s.stat.health) or literals; <operator> is > < >= <= = != .
       /execute as noael store result var $(hp)->float run stat get @s health
       /execute store result entity mira stats.health run stat get noael health"""
     global SELF
@@ -3066,6 +4133,7 @@ HANDLERS = {
     "character": cmd_character,
     "stat": cmd_stat,
     "attack": cmd_attack,
+    "move": cmd_move,
     "formula": cmd_formula,
     "item": cmd_item,
     "kill": cmd_kill,
@@ -3083,17 +4151,23 @@ HANDLERS = {
     "session": cmd_session,
     "execute": cmd_execute,
     "tellraw": cmd_tellraw,
+    "random": cmd_random,
+    "quest": cmd_quest,
+    "structure": cmd_structure,
+    "uuid": cmd_uuid,
     "help": cmd_help,
 }
 
 
 # Player members that are sub-CONTAINERS (drilled into), not plain fields.
-_PATH_SEGMENTS = {"stats", "equipment", "inventory",
-                  "talents", "abilities", "effects", "formulas", "nbt", "proc_state"}
+# Singular container names (+ the attribute->stat synonym). These read as container paths in a bare
+# dotted read like `hero.stat.health`; anything else at that position is a plain field read.
+_PATH_SEGMENTS = {"stat", "attribute", "attributes", "equipment", "inventory",
+                  "talent", "ability", "effect", "quest", "formula", "nbt", "proc_state"}
 
 
 def _resolve_and_print(path):
-    """Read a bare dotted path: hero, hero.name, hero.stats.health. Returns the value
+    """Read a bare dotted path: hero, hero.name, hero.stat.health. Returns the value
     (so /var result can capture it); returns False if it can't resolve."""
     parts = path.split(".")
     player = WORLD.get(parts[0])
@@ -3111,6 +4185,8 @@ def _resolve_and_print(path):
         return value
     obj = player
     for seg in parts[1:]:
+        if obj is player:
+            seg = _canon_container(seg)  # stats/attributes/... -> the real singular attribute
         if hasattr(obj, seg):
             obj = getattr(obj, seg)
         elif hasattr(obj, "__getitem__") and hasattr(obj, "__contains__") and seg in obj:
@@ -3136,28 +4212,58 @@ def handle_bare_path(expr):
     print("  commands start with '/'. To read a value try:  hero.inventory_slots")
 
 
+def _read_choice(prompt):
+    """Read a SINGLE keypress (no Enter) when interactive; fall back to input() when piped.
+    Echoes the key so the transcript shows the choice."""
+    print(prompt, end="", flush=True)
+    if not sys.stdin.isatty():
+        try:
+            return (input() or "n").strip().lower()[:1]
+        except EOFError:
+            print(); return "n"
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    print(ch)  # echo + newline
+    return ch.lower()
+
+
 def _confirm_or_undo(snapshot, warnings):
-    """Input had parse problems. Show them, then offer to undo (revert to snapshot).
-    y = undo & try again; n = keep it anyway. Returns the (possibly changed) outcome flag."""
+    """Input had parse problems. Show them, then offer (single keypress): y = revert & retry,
+    n = keep it anyway, c = create the referenced-but-missing function(s) now (then keep)."""
     print("  heads up — some input wasn't understood:")
     for warning in warnings:
         print(f"    - {warning}")
-    try:
-        answer = input("  undo this change? [y = revert and retry / n = keep it anyway]: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        answer = "n"
-        print()
+    missing = list(_MISSING_FNS)
+    _MISSING_FNS.clear()
+    label = "[y = revert / n = keep" + (" / c = create the missing function(s) now" if missing else "") + "]"
+    answer = _read_choice(f"  undo this change? {label}: ")
     if answer in ("y", "yes"):
         WORLD.clear()
         WORLD.update(snapshot)
         print("  reverted — nothing was changed.")
         return False
+    if missing and answer == "c":
+        print("  kept the change — now create the function(s):")
+        for fn in missing:
+            _function_editor(fn)  # the in-REPL editor, one per missing function
+        return True
     print("  kept as-is.")
     return True
 
 
 def dispatch(line):
     if not line.startswith("/"):
+        if re.fullmatch(r"\s*d\d+(\s+d\d+)*\s*", line):  # bare dice: 'd20' or 'd2 d3 d4' -> rolls
+            rolls = [str(_roll(int(n))) for n in re.findall(r"d(\d+)", line)]
+            print("  " + " ".join(rolls))
+            return rolls
         return handle_bare_path(_substitute(line))
     word, _, rest = line[1:].partition(" ")
     full = autofill.complete_command("/" + word)  # expand abbreviations: /char -> /character
@@ -3168,6 +4274,7 @@ def dispatch(line):
         #   (so a $(name) being DEFINED stays literal while operands/commands get substituted)
     if handler:
         parse_warnings()  # clear any stale warnings before running
+        _MISSING_FNS.clear()
         snapshot = copy.deepcopy(WORLD)  # so we can undo on a parse problem or a crash
         try:
             result = handler(rest)
@@ -3181,6 +4288,8 @@ def dispatch(line):
             kept = _confirm_or_undo(snapshot, warnings)
             if not kept:
                 return False
+        _ensure_session_uuids()  # anything just initiated (by any path) gets a session-unique uuid
+        _log(f"/{name} {rest}".rstrip())  # turn-stamped command log (rest is post-substitution: shows rolls/vars)
         return result
     if "/" + name in autofill.suggest_command("/" + word):
         print(f"  /{name} is a known command but isn't wired up yet")
@@ -3190,11 +4299,11 @@ def dispatch(line):
 
 
 # --- LIVE TAB COMPLETION (readline) ------------------------------------------
-COLLECTION_CMDS = {"talent": "talents", "effect": "effects", "ability": "abilities"}
-VALUE_CMDS = {"stat": "stats"}
+COLLECTION_CMDS = {"talent": "talent", "effect": "effect", "ability": "ability"}
+VALUE_CMDS = {"stat": "stat"}
 SUBCOMMANDS = {
     "character": ["new", "modify", "get", "show", "list", "remove"],
-    "item": ITEM_SUBS,  # /item keeps 'add' (add to inventory), per user
+    "item": ITEM_SUBS,  # 'new' is canonical now (add/give still work as hidden aliases)
     "turn": ["query", "next", "add", "set"],  # turn 'add' = + operator, stays
     **{cmd: ["new", "list", "modify", "remove"] for cmd in COLLECTION_CMDS},
     "ability": ["new", "list", "modify", "remove", "cast"],
@@ -3202,6 +4311,9 @@ SUBCOMMANDS = {
     "calendar": ["show", "add", "set", "event", "date"],  # calendar 'add' = move time (operator)
     "map": ["view", "pos", "get", "set", "new", "recommend"],
     "session": ["save", "load", "get", "history", "list"],
+    "quest": ["new", "complete", "modify", "delete", "list"],
+    "structure": ["new", "delete", "modify", "list"],
+    "uuid": ["get", "lookup", "set", "list"],
     **{cmd: ["new", "get", "list", "modify", "remove"] for cmd in VALUE_CMDS},
 }
 OPS3 = ["set", "add", "reset"]
@@ -3218,7 +4330,7 @@ def _relevant_procs(selector_token):
     if player is None:
         return []
     names = set(player.proc_state)
-    for talent in player.talents:
+    for talent in player.talent:
         if isinstance(talent.proc, Proc):
             for clause in talent.proc.clauses:
                 names.update(clause)
@@ -3237,7 +4349,7 @@ def _buffer_player(buffer):
 def _path_members(player, head):
     """Member names of a container for path autofill: stat/attribute names, item type_ids/names,
     talent/effect/ability names, or player.nbt keys."""
-    container = getattr(player, head, None) if player else None
+    container = getattr(player, _canon_container(head), None) if player else None
     if container is None:
         return []
     if isinstance(container, dict):
@@ -3259,7 +4371,7 @@ def _path_members(player, head):
 
 def _path_fields(player, head, member_name):
     """The settable fields of a member (e.g. an item's keys) for the 3rd path level."""
-    container = getattr(player, head, None) if player else None
+    container = getattr(player, _canon_container(head), None) if player else None
     if container is None or not hasattr(container, "get"):
         return []
     return _object_keys(container.get(member_name))
@@ -3333,9 +4445,9 @@ def _object_keys(obj):
     dynamic keys it currently carries. Powers field-name autofill after set/add/reset."""
     if obj is None:
         return []
-    keys = list(getattr(type(obj), "GENERIC_NBT", []))
+    keys = list(getattr(type(obj), "GENERIC_NBT", [])) + list(getattr(type(obj), "NBT", []))
     keys += list(getattr(obj, "nbt", {}).keys())
-    return list(dict.fromkeys(keys))
+    return [k for k in dict.fromkeys(keys) if k != "uuid"]  # uuid is managed via /uuid, not editable
 
 
 def _item_keys(selector_token, obj_sel):
@@ -3363,6 +4475,16 @@ def _completion_pool(cmd, args_before):
         if len(args_before) == 1:
             return ["true", "false"]  # true = remove entirely; default false = health 0 + pulse died
         return []
+    if cmd == "attack":
+        if len(args_before) == 0:
+            return sel                         # attacker
+        if len(args_before) == 1:
+            return sel                         # target
+        if len(args_before) == 2:
+            return ["with"]                    # then a weapon, {type:amount}, or a number
+        return []
+    if cmd == "move":
+        return sel if len(args_before) == 0 else []  # mover; then <x> <y>
     if cmd == "turn":
         if not args_before:
             return SUBCOMMANDS["turn"]
@@ -3373,6 +4495,43 @@ def _completion_pool(cmd, args_before):
         return ["formula"] if not args_before else []  # only formula documented for now
     if cmd == "data":
         return ["result", "success", "set", "list"] if not args_before else []
+    if cmd == "random":
+        return ["range"] if not args_before else []  # the '<min>..<max>' is typed (TAB inserts '..')
+    if cmd == "quest":
+        if not args_before:
+            return SUBCOMMANDS["quest"]
+        sub, after = args_before[0], args_before[1:]
+        if len(after) == 0:
+            return sel
+        if sub in ("complete", "modify", "delete") and len(after) == 1:
+            return _member_pool(after[0], "quest")
+        if sub == "modify" and len(after) == 2:
+            return OPS3
+        if sub == "modify" and len(after) == 3:
+            return _member_keys(after[0], "quest", after[1])
+        if sub == "delete" and len(after) == 2:
+            return ["true", "false"]
+        return []
+    if cmd == "uuid":
+        if not args_before:
+            return SUBCOMMANDS["uuid"]
+        sub, after = args_before[0], args_before[1:]
+        if sub == "get" and len(after) == 0:
+            return sel
+        if sub in ("lookup", "set") and len(after) == 0:
+            return sorted(_uuids_in_use())  # an existing uuid
+        if sub == "list" and len(after) == 0:
+            return sorted({u[:2] for u in _uuids_in_use()})  # the 2-letter type codes in use
+        return []
+    if cmd == "structure":
+        if not args_before:
+            return SUBCOMMANDS["structure"]
+        sub, after = args_before[0], args_before[1:]
+        if sub in ("new", "delete", "modify") and len(after) == 0:
+            return sorted({s.name for s in STRUCTURES})  # existing structure names (new: make another)
+        if sub == "modify" and len(after) == 1:
+            return OPS3
+        return []  # trailing x,y cells (new) are free-form
     if cmd == "formula":
         if not args_before:
             return ["new", "modify", "remove", "list", "recompute"]
@@ -3381,7 +4540,7 @@ def _completion_pool(cmd, args_before):
             return sel
         if sub in ("new", "modify", "remove") and len(after) == 1:
             player = _selector_player(after[0])
-            existing = list(player.formulas) if player else []
+            existing = list(player.formula) if player else []
             return list(dict.fromkeys(STAT_NAMES + existing))
         if sub in ("new", "modify") and len(after) == 2:
             return ["= "]  # the formula separator, with a trailing space to start typing
@@ -3437,9 +4596,10 @@ def _completion_pool(cmd, args_before):
         return ["run", "if", "unless", "store"]  # after an operand/selector: chain more or run
     if cmd == "session":
         if not args_before:
-            return ["save", "load", "get", "history", "list"]
-        if args_before[0] == "load" and len(args_before) == 1:  # complete saved session names
-            return sorted(f[:-5] for f in os.listdir(SESSION_DIR) if f.endswith(".json")) if os.path.isdir(SESSION_DIR) else []
+            return ["save", "load", "get", "id", "history", "list"]
+        if args_before[0] == "load" and len(args_before) == 1:  # ids + friendly names
+            meta = _session_meta()
+            return [str(s) for s in sorted(meta)] + [n for n in meta.values() if n]
         return []
     if cmd == "function":
         if not args_before:
@@ -3464,12 +4624,13 @@ def _completion_pool(cmd, args_before):
             if sub == "get" and len(after) == 1:
                 return _object_keys(_selector_player(after[0]))
         elif cmd == "item":
-            if sub in ("add", "remove", "list", "modify") and len(after) == 0:
+            # every item subcommand whose FIRST arg is a selector (incl. the add/give aliases of new)
+            if sub in ("new", "add", "give", "equip", "unequip", "use", "remove", "list", "modify") and len(after) == 0:
                 return sel
             if sub == "loot" and len(after) == 1:
                 return sel
-            if sub in ("remove", "modify") and len(after) == 1:
-                return _member_pool(after[0], "inventory")
+            if sub in ("remove", "modify", "equip", "use") and len(after) == 1:
+                return _member_pool(after[0], "inventory")  # the item (equip/use pulls from inventory)
             if sub == "modify" and len(after) == 2:
                 return OPS3
             if sub == "modify" and len(after) == 3:
@@ -3542,6 +4703,8 @@ for _cls in (Player,):
         TIER_MAP[_cls.type_id] = [list(t) for t in _tiers] + ([_leftover] if _leftover else [])
 
 _DISPLAY_GROUPS = None  # set by the completer: ordered groups (list of lists) for the listing
+PROMPT = "ttrpg> "      # the prompt currently being shown; the display hook redraws with it
+                        # (set by run() and by the function editor so the redraw isn't mis-prompted)
 
 
 def _display_matches(substitution, matches, longest_match_length):
@@ -3555,7 +4718,7 @@ def _display_matches(substitution, matches, longest_match_length):
     else:
         groups = [sorted(matches)]
     body = "\n---\n".join("  ".join(group) for group in groups)
-    sys.stdout.write("\n  " + body.replace("\n", "\n  ") + "\n" + "ttrpg> " + readline.get_line_buffer())
+    sys.stdout.write("\n  " + body.replace("\n", "\n  ") + "\n" + PROMPT + readline.get_line_buffer())
     sys.stdout.flush()
 
 
@@ -3573,7 +4736,7 @@ def _complete_line(buffer, text, bare=False):
         # the NBT vocabulary is keyed by the COMMAND for character/talent/effect/ability
         # (the token before '{' is the element's NAME, not a type); /item uses the type token.
         by_command = {"character": "player", "talent": "talent", "effect": "effect",
-                      "ability": "ability", "summon": "mob"}
+                      "ability": "ability", "summon": "mob", "quest": "quest", "structure": "structure"}
         type_id = by_command.get(cmd) or _active_type(buffer)
         options = autofill.suggest_nbt_key(text, type_id)
         _DISPLAY_GROUPS = TIER_MAP.get(type_id) or [options]  # tiers for player; ordered otherwise
@@ -3603,11 +4766,26 @@ def _gather(text):
     global _DISPLAY_GROUPS
     _DISPLAY_GROUPS = None
     buffer = readline.get_line_buffer()
+    # function editor: ':ins <N> <command>' — complete the <command> part like a normal line, so a
+    # command you're inserting still gets full autofill (the ':ins N ' prefix is stripped first).
+    ins = re.match(r"^:(?:ins|insert|i)\s+\d+\s", buffer)
+    if ins:
+        return _complete_line(buffer[ins.end():], text)
+    # /random range <min>..<max> — after a bare number, TAB inserts '..' (Minecraft-style range),
+    # so '1' + TAB -> '1..' and you keep typing the max. ('.' isn't a delimiter, so text holds it all.)
+    prior0 = buffer[:len(buffer) - len(text)].split()
+    cmdr = (autofill.complete_command(prior0[0]) or prior0[0]).lstrip("/") if prior0 else ""
+    if cmdr == "random" and len(prior0) >= 2 and "range".startswith(prior0[1].lower()) and re.fullmatch(r"\d+", text):
+        _DISPLAY_GROUPS = [[text + ".."]]
+        return [text + ".."]
     # /data <mode> $(name)->TYPE  OR  /execute ... store result|success var $(name)->TYPE :
     # complete the datatype as a bare word (int, float, ...).
     if (re.match(r"^/data\s+(result|success|set)\s+\$\(\w+\)->\w*$", buffer)
             or (buffer.lstrip().startswith("/execute") and re.search(r"\bstore\s+(result|success)\s+var\s+\$\(\w+\)->\w*$", buffer))):
-        options = [t for t in DATATYPES if t.startswith(text)]
+        # `>` is no longer a delimiter, so `text` is the whole '$(x)->partial' word; build the
+        # full '$(name)->TYPE' candidates (not bare types) so readline replaces the word cleanly.
+        head = text[:text.find("->") + 2] if "->" in text else text
+        options = [head + t for t in DATATYPES if (head + t).startswith(text)]
         _DISPLAY_GROUPS = [options]
         return options
     run = re.match(r"^/data\s+\S+\s+\S+\s+run\s", buffer)  # autofill the run-command part
@@ -3642,24 +4820,35 @@ def setup_readline():
         readline.parse_and_bind("bind ^I rl_complete")
     else:
         readline.parse_and_bind("tab: complete")
-    readline.parse_and_bind("set show-all-if-ambiguous on")  # list options on the first TAB
-    readline.set_completer_delims(" \t\n{,>")  # '>' breaks so $(x)->TYPE completes TYPE alone
+    readline.parse_and_bind("set show-all-if-ambiguous on")    # list options on the first TAB
+    readline.parse_and_bind("set show-all-if-unmodified on")   # ...even when it can't extend — kills the 2nd TAB
+    readline.parse_and_bind("set completion-query-items 200")  # don't prompt 'display all N?' for normal lists
+    readline.parse_and_bind("set page-completions off")        # no --More-- paging spam; print once
+    readline.set_completer_delims(" \t\n{,")  # NOT '>' — it appears inside $(x)->type candidates
     readline.set_completer(_completer)
-    try:
-        readline.set_completion_display_matches_hook(_display_matches)
-    except (AttributeError, NotImplementedError):
-        pass  # not supported on this backend; falls back to default listing
+    # NOTE: we deliberately do NOT install a custom completion-display hook. It looked nicer
+    # (tiered/ordered groups) but it fought readline's own redisplay: when readline auto-inserts a
+    # common prefix (e.g. '$(x)' -> '$(x)->') and THEN lists, it redraws the line incrementally
+    # (just the inserted '->') right after the hook's manual prompt+line redraw — painting a phantom
+    # second '->' ('$(x)->->') and corrupting the editor prompt. The line BUFFER was always correct,
+    # but the screen wasn't, which also broke backspacing/further autofill. readline's native listing
+    # redraws the prompt+line correctly on its own, so we rely on it. (_display_matches/_DISPLAY_GROUPS
+    # are left in place, unused, in case a backend-safe grouped display is revisited later.)
 
 
 # --- run loop ----------------------------------------------------------------
 
 def run():
+    global PROMPT
     setup_readline()
-    print("TTRPG shell. TAB to complete, Ctrl-C / Ctrl-D to quit.")
-    print("Try:  /character add hero   then   /stat hero health set 20   then   hero.stats.health\n")
+    sid = _ensure_session_id()
+    print("TTRPG shell. Ctrl-C / Ctrl-D to quit.")
+    print(f"session {sid}  (saves to {_session_path(sid)}; UI would host on http://localhost:{sid})")
+    print("Type `/` then hit TAB to see your options.\n")
     while True:
         try:
-            line = input("ttrpg> ").strip()
+            PROMPT = "ttrpg> "  # the main prompt (the editor overrides PROMPT while it's open)
+            line = input(PROMPT).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break

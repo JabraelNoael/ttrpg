@@ -116,5 +116,15 @@
   "pos": [
     0,
     0
+  ],
+  "structures": [
+    {
+      "name": "tower",
+      "description": "",
+      "pos": [
+        1,
+        1
+      ]
+    }
   ]
 }

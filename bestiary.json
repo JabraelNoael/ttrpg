@@ -17,7 +17,6 @@
     "description": "giant lizard with thick scales and powerful breath matching the force of an affinity you'd find naturally",
     "stats": {"health": 85},
     "attributes": {"attack": 12},
-    "ability": {"."},
     "nbt": {"size": "huge", "behavior": "[]"}
   },
   "drake": {

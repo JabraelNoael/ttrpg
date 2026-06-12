@@ -38,6 +38,7 @@ bludgeon_penetration
 pierce_penetration
 slash_penetration
 armor_class
+armor_class_efficiency
 defense
 physical_resistance
 bludgeon_resistance_base
