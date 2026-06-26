@@ -1,0 +1,103 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Biome Taxonomy — Draft for Redline</title>
+<style>
+  :root { --bg:#14161a; --panel:#1b1e24; --line:#2c313a; --ink:#d7dae0; --muted:#8a93a3; --gold:#f5c542; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 ui-monospace, Menlo, Consolas, monospace; padding: 28px 22px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 22px; max-width: 760px; }
+  .sub b { color: var(--ink); }
+  .fam { margin: 26px 0 10px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .biome { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .swatch { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+  .swatch .glyph { font-size: 30px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+  .swatch .wt { font-size: 12px; font-weight: 700; color: #000; background: rgba(255,255,255,.55);
+                border-radius: 20px; padding: 2px 9px; }
+  .meta { padding: 9px 12px 11px; }
+  .meta .name { font-size: 15px; font-weight: 600; }
+  .meta .key { color: var(--muted); font-size: 11px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); }
+  .t-cold { color: #8fc7e6; border-color: #2c4a5e; } .t-temperate { color: #9bd29b; border-color: #2e5230; }
+  .t-hot { color: #e6a07a; border-color: #5e3a2c; }
+  .m-arid { color: #d9c27a; } .m-normal { color: #a7b0bf; } .m-wet { color: #7ab6d9; }
+  .aff { color: var(--muted); font-size: 11px; margin-top: 7px; }
+  .legend { margin-top: 8px; color: var(--muted); font-size: 12px; }
+</style></head>
+<body>
+  <h1>Biome taxonomy — draft for redline</h1>
+  <p class="sub">31 biomes across 8 families. The badge on each swatch is its <b>generation weight</b> (higher = more common).
+     Each biome carries <b>temperature</b> + <b>moisture</b> tags — these drive weather (e.g. snow favors <b>cold</b>) so
+     weather.json never needs a per-biome table. <b>Affinity</b> = the biomes it likes to border, which grows continuity
+     during <code>/map generate</code>. Edit <code>biomes_draft.json</code> directly: rename, cut, recolor, retag, reweight.</p>
+  <div id="root"></div>
+<script>
+const B = {
+ "plains":{"label":"Plains","color":"#8db360","glyph":"🌾","weight":12,"temperature":"temperate","moisture":"normal","affinity":["meadow","steppe","hills","woodland"],"_family":"grassland"},
+ "meadow":{"label":"Meadow","color":"#a7c957","glyph":"🌼","weight":6,"temperature":"temperate","moisture":"wet","affinity":["plains","woodland","river"],"_family":"grassland"},
+ "steppe":{"label":"Steppe","color":"#c2b280","glyph":"🌿","weight":6,"temperature":"temperate","moisture":"arid","affinity":["plains","badlands","hills"],"_family":"grassland"},
+ "savanna":{"label":"Savanna","color":"#c9a14a","glyph":"🦒","weight":6,"temperature":"hot","moisture":"arid","affinity":["steppe","desert","woodland"],"_family":"grassland"},
+ "woodland":{"label":"Woodland","color":"#6b8e3d","glyph":"🪵","weight":7,"temperature":"temperate","moisture":"normal","affinity":["plains","temperate_forest","hills"],"_family":"forest"},
+ "temperate_forest":{"label":"Temperate Forest","color":"#4a7c44","glyph":"🌳","weight":9,"temperature":"temperate","moisture":"normal","affinity":["woodland","boreal_forest","hills","river"],"_family":"forest"},
+ "boreal_forest":{"label":"Boreal Forest","color":"#2f5d4f","glyph":"🌲","weight":7,"temperature":"cold","moisture":"wet","affinity":["temperate_forest","tundra","mountain"],"_family":"forest"},
+ "rainforest":{"label":"Rainforest","color":"#1f6b3b","glyph":"🌴","weight":5,"temperature":"hot","moisture":"wet","affinity":["jungle_river","swamp","savanna"],"_family":"forest"},
+ "tundra":{"label":"Tundra","color":"#b8c4c2","glyph":"🦌","weight":6,"temperature":"cold","moisture":"normal","affinity":["boreal_forest","snowfield","mountain"],"_family":"cold"},
+ "snowfield":{"label":"Snowfield","color":"#e8eef2","glyph":"❄️","weight":4,"temperature":"cold","moisture":"wet","affinity":["tundra","glacier","mountain"],"_family":"cold"},
+ "glacier":{"label":"Glacier","color":"#bcd6e6","glyph":"🧊","weight":3,"temperature":"cold","moisture":"normal","affinity":["snowfield","mountain","ocean"],"_family":"cold"},
+ "alpine":{"label":"Alpine","color":"#8fa3a8","glyph":"🏔️","weight":4,"temperature":"cold","moisture":"normal","affinity":["mountain","tundra","hills"],"_family":"cold"},
+ "hills":{"label":"Hills","color":"#9caf6b","glyph":"⛰️","weight":8,"temperature":"temperate","moisture":"normal","affinity":["plains","mountain","woodland"],"_family":"highland"},
+ "mountain":{"label":"Mountain","color":"#8a8d91","glyph":"🗻","weight":7,"temperature":"cold","moisture":"normal","affinity":["hills","alpine","boreal_forest","volcano"],"_family":"highland"},
+ "volcano":{"label":"Volcano","color":"#6e3b3b","glyph":"🌋","weight":2,"temperature":"hot","moisture":"arid","affinity":["mountain","ashland"],"_family":"highland"},
+ "ashland":{"label":"Ashland","color":"#5a5145","glyph":"🪨","weight":2,"temperature":"hot","moisture":"arid","affinity":["volcano","wasteland","badlands"],"_family":"highland"},
+ "desert":{"label":"Desert","color":"#e3c179","glyph":"🏜️","weight":7,"temperature":"hot","moisture":"arid","affinity":["dunes","badlands","savanna","mesa"],"_family":"arid"},
+ "dunes":{"label":"Dunes","color":"#d9b066","glyph":"🐪","weight":4,"temperature":"hot","moisture":"arid","affinity":["desert","oasis"],"_family":"arid"},
+ "mesa":{"label":"Mesa","color":"#b5651d","glyph":"🟧","weight":3,"temperature":"hot","moisture":"arid","affinity":["desert","badlands","ashland"],"_family":"arid"},
+ "badlands":{"label":"Badlands","color":"#b07a4a","glyph":"🌵","weight":4,"temperature":"hot","moisture":"arid","affinity":["desert","mesa","steppe"],"_family":"arid"},
+ "oasis":{"label":"Oasis","color":"#5fae7a","glyph":"🏝️","weight":2,"temperature":"hot","moisture":"normal","affinity":["desert","dunes"],"_family":"arid"},
+ "swamp":{"label":"Swamp","color":"#5c6b4a","glyph":"🐸","weight":5,"temperature":"temperate","moisture":"wet","affinity":["marsh","rainforest","river"],"_family":"wetland"},
+ "marsh":{"label":"Marsh","color":"#7a8b5a","glyph":"🪷","weight":4,"temperature":"temperate","moisture":"wet","affinity":["swamp","river","coast","lake"],"_family":"wetland"},
+ "ocean":{"label":"Ocean","color":"#2e5e8c","glyph":"🌊","weight":10,"temperature":"temperate","moisture":"wet","affinity":["ocean","reef","coast","glacier"],"_family":"water"},
+ "reef":{"label":"Reef","color":"#2fa3a3","glyph":"🐠","weight":2,"temperature":"hot","moisture":"wet","affinity":["ocean","coast"],"_family":"water"},
+ "coast":{"label":"Coast","color":"#d8c98a","glyph":"🏖️","weight":5,"temperature":"temperate","moisture":"wet","affinity":["ocean","plains","marsh","river"],"_family":"water"},
+ "lake":{"label":"Lake","color":"#3f7fae","glyph":"💧","weight":4,"temperature":"temperate","moisture":"wet","affinity":["river","marsh","meadow","plains"],"_family":"water"},
+ "river":{"label":"River","color":"#4a90c2","glyph":"🏞️","weight":5,"temperature":"temperate","moisture":"wet","affinity":["lake","coast","plains","temperate_forest"],"_family":"water"},
+ "jungle_river":{"label":"Jungle River","color":"#2f8f6b","glyph":"🛶","weight":2,"temperature":"hot","moisture":"wet","affinity":["rainforest","swamp"],"_family":"water"},
+ "cave":{"label":"Cave","color":"#3a3a40","glyph":"🦇","weight":3,"temperature":"temperate","moisture":"normal","affinity":["mountain","hills","cavern"],"_family":"underground"},
+ "cavern":{"label":"Crystal Cavern","color":"#2c2c33","glyph":"💎","weight":1,"temperature":"cold","moisture":"normal","affinity":["cave","mountain"],"_family":"underground"},
+ "wasteland":{"label":"Wasteland","color":"#8a7f6b","glyph":"☠️","weight":2,"temperature":"hot","moisture":"arid","affinity":["ashland","badlands","mesa"],"_family":"ruined"}
+};
+const FAM_ORDER = ["grassland","forest","cold","highland","arid","wetland","water","underground","ruined"];
+function lum(hex){ const n=parseInt(hex.slice(1),16); const r=(n>>16)&255,g=(n>>8)&255,b=n&255; return (0.299*r+0.587*g+0.114*b); }
+const root = document.getElementById("root");
+const byFam = {};
+for (const [k,v] of Object.entries(B)) (byFam[v._family] ||= []).push([k,v]);
+for (const fam of FAM_ORDER) {
+  const items = byFam[fam]; if (!items) continue;
+  const h = document.createElement("div"); h.className="fam"; h.textContent = fam + " · " + items.length;
+  root.appendChild(h);
+  const grid = document.createElement("div"); grid.className="grid";
+  for (const [k,v] of items) {
+    const wtColor = lum(v.color) > 150 ? "#000" : "#000";
+    grid.insertAdjacentHTML("beforeend", `
+      <div class="biome">
+        <div class="swatch" style="background:${v.color}">
+          <span class="glyph">${v.glyph}</span>
+          <span class="wt">w${v.weight}</span>
+        </div>
+        <div class="meta">
+          <div class="name">${v.label}</div>
+          <div class="key">${k}</div>
+          <div class="tags">
+            <span class="tag t-${v.temperature}">${v.temperature}</span>
+            <span class="tag m-${v.moisture}">${v.moisture}</span>
+          </div>
+          <div class="aff">borders: ${v.affinity.join(", ")}</div>
+        </div>
+      </div>`);
+  }
+  root.appendChild(grid);
+}
+</script>
+</body></html>

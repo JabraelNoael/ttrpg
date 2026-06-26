@@ -64,3 +64,13 @@ tenacity
 luck
 party_size
 yield
+magic_critical_scale
+dodge_chance
+parry_chance
+parry_recovery
+block_bypass
+posture
+max_posture
+posture_regen
+reveal_radius
+dim_radius

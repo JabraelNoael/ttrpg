@@ -18,10 +18,28 @@ Design notes (kept deliberately simple + all in one file so you can redesign fre
     editor isn't usable from the box yet — edit functions in the shell for now.
 """
 import io
+import os
+import re
+import sys
 import json
 import contextlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
+
+# The whole frontend lives in ui.html (edit it live: save -> refresh the browser, no restart needed).
+# The PAGE string at the bottom is just the seed/fallback used if ui.html is ever missing.
+HTML_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui.html")
+HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reference.md")
+
+
+def page_html():
+    """Read ui.html fresh on every request (so edits show on the next browser refresh). Falls back
+    to the embedded PAGE if the file is missing."""
+    try:
+        with open(HTML_FILE, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return PAGE
 
 
 class _Server(HTTPServer):
@@ -29,29 +47,94 @@ class _Server(HTTPServer):
 
 import repl
 
-PORT = repl._ensure_session_id()  # the UI hosts on the session's id, so the URL is grounded in it
 _DELIMS = " \t{,>"  # mirrors repl's readline completer delimiters
 
 
+def _newest_saved_id():
+    """The id of the most-recently-modified saved session (so a bare relaunch reopens your latest
+    world), or None if there are no saves yet."""
+    ids = repl._saved_session_ids()
+    if not ids:
+        return None
+    return max(ids, key=lambda sid: os.path.getmtime(repl._session_path(sid)))
+
+
+def _boot_session(arg):
+    """Decide which world to host before the server binds its port:
+      arg in (None / "")          -> load the NEWEST saved session (relaunch reopens your world);
+                                     if there are no saves, start a fresh empty session.
+      arg in ("new"/"fresh"/"-n") -> always start a fresh empty session.
+      arg = <id|name>             -> load that specific saved session.
+    Returns the port to host on (= the loaded/allocated session id). Loading sets repl.SESSION_ID,
+    so the UI hosts on the SAME id the world was saved under (stable URL)."""
+    arg = (arg or "").strip()
+    if arg.lower() in ("new", "fresh", "-n", "--new"):
+        return repl._ensure_session_id()                 # fresh empty world on the lowest free port
+    target = arg or _newest_saved_id()
+    if target in (None, ""):
+        return repl._ensure_session_id()                 # nothing saved yet -> fresh
+    result = repl.cmd_session(f"load {target}")          # loads world + sets repl.SESSION_ID to its id
+    if not result:
+        print(f"  (couldn't load '{target}' — starting a fresh session instead)")
+        return repl._ensure_session_id()
+    return repl._ensure_session_id()                     # now returns the loaded session's id
+
+
 def run_command(line):
-    """Run one command through repl.dispatch, capturing whatever it prints."""
+    """Run one command through repl.dispatch, capturing whatever it prints.
+    stdin is swapped to an empty stream so any interactive prompt (parse-warning
+    confirm, execution check, structure picker) takes its non-interactive default
+    instead of blocking the HTTP thread on a keypress nobody is typing into the
+    server's terminal. For parse warnings that default is 'keep' — the warnings
+    are still printed (and shown in the console)."""
     buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
-        try:
-            repl.dispatch(line)
-        except Exception as error:           # never let the server die on a bad command
-            print(f"  error: {error}")
+    saved_stdin = sys.stdin
+    sys.stdin = io.StringIO()  # not a tty, reads as EOF -> every prompt auto-resolves
+    try:
+        with contextlib.redirect_stdout(buffer):
+            try:
+                repl.dispatch(line)
+            except Exception as error:       # never let the server die on a bad command
+                print(f"  error: {error}")
+    finally:
+        sys.stdin = saved_stdin
     return buffer.getvalue().rstrip("\n")
 
 
 def get_state():
     """The whole world as JSON-able data the page renders."""
+    cells = repl.MAP.get("cells", {})
+    weather, entities = {}, []
+    with repl._DISPATCH_LOCK:  # _weather_at syncs shared weather state — don't race a running command
+        for key in cells:
+            try:
+                x, y = (int(n) for n in key.split(","))
+                weather[key] = repl._weather_at(x, y)[0]
+            except (ValueError, KeyError):
+                pass
+        for name, entity in repl.WORLD.items():
+            pos = repl._entity_pos(entity)
+            if pos is None:
+                continue
+            kind = "mob" if repl._is_mob(entity) else ("npc" if repl._is_npc(entity) else "player")
+            entities.append({"name": name, "x": pos[0], "y": pos[1], "kind": kind,
+                             "symbol": entity.nbt.get("symbol") or ""})
     return {
         "turn": repl.TURN,
         "active": repl.TURN_ACTIVE,
         "players": {name: repl._player_to_dict(p) for name, p in repl.WORLD.items()},
         "map": repl.MAP,
+        "biomes": repl.BIOMES,                                   # name -> {label,color,glyph,temperature,...}
+        "body_coverage": repl.BODY_COVERAGE,                     # normalized slot -> default % of body covered
+        "weather": weather,                                      # "x,y" -> weather name (for the atlas overlay)
+        "entities": entities,                                    # positioned players/npcs/mobs for atlas markers
+        "structures": [s.as_dict() for s in repl.STRUCTURES],    # each carries pos:[x,y]
         "history": list(repl.HISTORY)[-60:],
+        "functions": {k: list(v) for k, v in repl.FUNCTIONS.items()},
+        "hooks": {name: {"name": h.name, "on": h.on, "context": h.context,
+                         "condition": repr(h.condition) if h.condition else "", "run": repr(h.run) if h.run else "",
+                         "description": h.description} for name, h in repl.WORLD_HOOKS.items()},
+        "calendar": repl._calendar_year(repl.TURN),
     }
 
 
@@ -72,18 +155,32 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")  # never serve a stale ui.html / state
         self.end_headers()
         self.wfile.write(data)
 
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == "/":
-            self._send(200, PAGE, "text/html")
+            self._send(200, page_html(), "text/html")
         elif url.path == "/state":
             self._send(200, json.dumps(get_state(), default=str))
         elif url.path == "/complete":
             line = parse_qs(url.query).get("line", [""])[0]
             self._send(200, json.dumps(complete(line)))
+        elif url.path == "/help":               # the formatting reference, read fresh (edit reference.md live)
+            try:
+                with open(HELP_FILE, encoding="utf-8") as fh:
+                    body = fh.read()
+            except OSError:
+                body = "# Reference\n\n(reference.md not found — create it next to ui.py)"
+            self._send(200, body, "text/markdown")
+        elif re.fullmatch(r"/[\w.-]+\.html", url.path or ""):   # serve sibling .html files (e.g. /hook.html prototype)
+            try:
+                with open(os.path.join(os.path.dirname(__file__), url.path.lstrip("/")), encoding="utf-8") as fh:
+                    self._send(200, fh.read(), "text/html")
+            except OSError:
+                self._send(404, "not found")
         else:
             self._send(404, "{}")
 
@@ -204,8 +301,24 @@ PAGE = r"""<!doctype html>
   .statgrid .sg label { text-align: right; color: #9aa3b2; } .statgrid .sg input { width: 92px; }
   .warn { color: #e06c6c; font-size: 12px; }
 
+  /* ABILITY CARDS */
+  .ability-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .ability-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .ability-card .ab-name { font-size: 14px; font-weight: 600; color: #e8eaed; }
+  .ability-card .ab-lvl { font-size: 11px; color: #9aa3b2; margin-left: 6px; }
+  .ability-card .ab-desc { color: #9aa3b2; font-size: 12px; margin: 4px 0 8px; }
+  .ability-card .ab-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .ability-tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+  .ab-cast { border-color: #6a8fd8; color: #8ab4f8; background: #1c2540; }
+  .ab-cooldown { border-color: #6b7280; color: #9aa3b2; background: #1e2128; }
+  .ab-cost { border-color: #b5803f; color: #d9a441; background: #28200e; }
+  .ab-affinity { border-color: #6a4fb5; color: #b9a8d8; background: #1e1630; }
+  .ab-damage { border-color: #c0392b; color: #e88; background: #2a1212; }
+  .ab-onhit { border-color: #2e7d32; color: #81c784; background: #0d200e; }
+  .ab-nbt { border-color: var(--line); color: #9aa3b2; background: var(--bg); }
+
   /* CONSOLE — absolutely pinned to the bottom, fixed height (--footerH) */
-  footer { position: absolute; left: 0; right: 0; bottom: 0; height: var(--footerH); overflow: hidden;
+  footer { position: absolute; left: 0; right: 0; bottom: 0; height: var(--footerH); overflow: visible;
            border-top: 1px solid var(--line); background: #1d2026; padding: 8px 12px; }
   footer .lbl { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
   #log { height: 84px; overflow: auto; white-space: pre-wrap; color: #aab; background: var(--bg);
@@ -213,7 +326,7 @@ PAGE = r"""<!doctype html>
   #cmdrow { position: relative; display: flex; gap: 6px; }
   #cmd { flex: 1; padding: 7px 9px; background: var(--bg); color: #e8eaed; border: 1px solid #3a4150; border-radius: 5px; font: inherit; }
   #ac { position: absolute; bottom: 38px; left: 0; right: 60px; background: var(--panel); border: 1px solid #3a4150;
-        border-radius: 5px; max-height: 180px; overflow: auto; display: none; z-index: 50; }
+        border-radius: 5px; max-height: 180px; overflow: auto; display: none; z-index: 9999; }
   #ac div { padding: 4px 9px; cursor: pointer; } #ac div:hover, #ac div.sel { background: #314056; }
   button.go { padding: 7px 14px; background: #314056; color: #e8eaed; border: 1px solid #4c6286; border-radius: 5px; cursor: pointer; }
 </style></head>
@@ -338,16 +451,20 @@ function pieWheel(segs, center) {
   return `<div class="wheelwrap"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" id="wheelsvg">${svg}</svg></div>`;
 }
 
-// Assign each name a single-key accelerator: its first UNUSED letter (so a 2nd "n" name falls through
-// to its next free letter); also always bind its 1-based position number. Returns [{name,key,num}].
+// Assign each name a single-key accelerator: its first UNUSED letter. ONLY names that get no free
+// letter fall back to a number — numbered 1,2,…,9,0 (keyboard row order), starting at 1 and assigned
+// in order ONLY as needed (so the first letterless name is [1], not its position). After 0 (the 10th
+// number) we run out — extra letterless names get no key. Returns [{name,key,isNum}].
+const NUM_ROW = ["1","2","3","4","5","6","7","8","9","0"];
 function assignKeys(names) {
-  const used = new Set(), out = [];
-  names.forEach((name, idx) => {
-    let key = null;
-    for (const ch of name.toLowerCase()) { if (/[a-z0-9]/.test(ch) && !used.has(ch)) { key = ch; break; } }
-    if (key) used.add(key);
-    out.push({name, key, num: idx + 1});
-  });
+  const usedLetters = new Set(), out = [];
+  let numIdx = 0;
+  for (const name of names) {
+    let key = null, isNum = false;
+    for (const ch of name.toLowerCase()) { if (/[a-z]/.test(ch) && !usedLetters.has(ch)) { key = ch; usedLetters.add(ch); break; } }
+    if (!key && numIdx < NUM_ROW.length) { key = NUM_ROW[numIdx++]; isNum = true; }
+    out.push({name, key, isNum});
+  }
   return out;
 }
 
@@ -363,11 +480,11 @@ function renderPicker() {
     const p = STATE.players[e.name];
     const charName = (p.nbt && p.nbt.name) || "";
     const act = `go({kind:'wheel',player:'${e.name}'})`;
-    if (e.key) KEYMAP[e.key] = () => go({kind: "wheel", player: e.name});
-    KEYMAP[String(e.num)] = () => go({kind: "wheel", player: e.name});
-    // letter free -> gold letter in the name; otherwise prefix "[N] " with the number key gold.
-    const labelHTML = e.key ? hkSVG(e.name, e.key)
-                            : `[<tspan class="hk">${e.num}</tspan>] ${e.name}`;
+    if (e.key) KEYMAP[e.key] = () => go({kind: "wheel", player: e.name});  // only keys that were assigned
+    // letter -> gold letter in the name; number fallback -> "[N] name" with N gold; none -> plain.
+    const labelHTML = !e.key ? e.name
+                     : e.isNum ? `[<tspan class="hk">${e.key}</tspan>] ${e.name}`
+                     : hkSVG(e.name, e.key);
     return {labelHTML, sub: charName, fill: `hsl(${Math.round(i * 360 / names.length)} 40% 60%)`, action: act};
   });
   return pieWheel(segs, null);  // no centre hub
@@ -407,13 +524,72 @@ function kv(obj, skipZero) {
 }
 function pills(arr) { return (arr && arr.length) ? arr.map(s => `<span class="pill">${s}</span>`).join("") : `<span class="muted">none</span>`; }
 
+function stageAbility(player) {
+  const g = (id) => (document.getElementById(id) || {}).value.trim();
+  const name = g("ab_name"); if (!name) { alert("ability needs a name"); return; }
+  const nbt = {};
+  const pairs = [
+    ["cast_type", g("ab_cast_type")], ["level", g("ab_level")],
+    ["description", g("ab_desc")], ["cooldown", g("ab_cooldown")],
+    ["cost", g("ab_cost")], ["affinity", g("ab_affinity")],
+    ["damage", g("ab_damage")], ["on_hit", g("ab_on_hit")],
+  ];
+  for (const [k, v] of pairs) { if (v) nbt[k] = v; }
+  const nbtStr = Object.keys(nbt).length ? "{" + Object.entries(nbt).map(([k,v]) => `${k}:${v}`).join(", ") + "}" : "";
+  send(`/ability new ${player} ${name}${nbtStr}`);
+}
+
+function renderAbilities(abilities, player) {
+  const creator = `<div class="sub" style="margin-bottom:12px">
+    <h4>create</h4>
+    <div class="editor">
+      <div class="row"><label class="f">name</label><input type="text" id="ab_name" placeholder="polymorph"></div>
+      <div class="row"><label class="f">cast_type</label><input type="text" id="ab_cast_type" placeholder="active / passive / reaction">
+        <label class="f" style="width:60px">level</label><input type="text" id="ab_level" placeholder="1" style="width:60px"></div>
+      <div class="row"><label class="f">description</label><input type="text" id="ab_desc" placeholder="optional flavour text"></div>
+      <div class="row"><label class="f">cooldown</label><input type="text" id="ab_cooldown" placeholder="7  or  0/7">
+        <label class="f" style="width:60px">affinity</label><input type="text" id="ab_affinity" placeholder="arcana" style="width:100px"></div>
+      <div class="row"><label class="f">cost</label><input type="text" id="ab_cost" placeholder="[stats.mana(20)]"></div>
+      <div class="row"><label class="f">damage</label><input type="text" id="ab_damage" placeholder="30">
+        <label class="f" style="width:auto">on_hit</label><input type="text" id="ab_on_hit" placeholder="[stats.health(-5)]" style="flex:1;margin-left:8px"></div>
+      <div class="row"><button class="go" onclick="stageAbility('${player}')">Create → stage command</button>
+        <span class="hint">stages <code>/ability new</code> — review in console, then Enter</span></div>
+    </div>
+  </div>`;
+  const tag = (cls, text) => `<span class="ability-tag ${cls}">${text}</span>`;
+  const grid = (!abilities || !abilities.length)
+    ? `<span class="muted">no abilities yet</span>`
+    : `<div class="ability-grid">${abilities.map(ab => {
+        const tags = [];
+        if (ab.cast_type) tags.push(tag("ab-cast", ab.cast_type));
+        if (ab.cooldown) {
+          const [cur, tot] = ab.cooldown.split("/");
+          tags.push(tag("ab-cooldown", parseInt(cur) <= 0 ? `cd: ${tot}t` : `cd: ${cur}/${tot}`));
+        }
+        if (ab.cost) tags.push(tag("ab-cost", `cost: ${ab.cost}`));
+        if (ab.affinity) tags.push(tag("ab-affinity", ab.affinity));
+        if (ab.damage) tags.push(tag("ab-damage", `dmg: ${ab.damage}`));
+        if (ab.on_hit) tags.push(tag("ab-onhit", `on_hit: ${ab.on_hit}`));
+        const knownKeys = new Set(["name","level","description","cooldown","cost","on_hit","origin","cast_type","affinity","damage"]);
+        Object.entries(ab).forEach(([k, v]) => { if (!knownKeys.has(k) && v != null && v !== "") tags.push(tag("ab-nbt", `${k}: ${v}`)); });
+        const lvlBadge = ab.level && ab.level !== 1 ? `<span class="ab-lvl">lv${ab.level}</span>` : "";
+        const desc = ab.description ? `<div class="ab-desc">${ab.description}</div>` : "";
+        return `<div class="ability-card">
+          <div><span class="ab-name">${ab.name}</span>${lvlBadge}</div>
+          ${desc}
+          <div class="ab-row">${tags.join("") || '<span class="muted" style="font-size:11px">no fields set</span>'}</div>
+        </div>`;
+      }).join("")}</div>`;
+  return creator + grid;
+}
+
 function renderSubpage() {
   const p = STATE.players[NAV.cur.player], slice = NAV.cur.slice;
   let body;
   if (slice === "stats") body = card("stats (non-zero)", kv(p.stats, true));
   else if (slice === "formulas") body = card("formulas", kv(p.formulas));
   else if (slice === "talents") body = card("talents", pills(p.talents));
-  else if (slice === "abilities") body = card("abilities", pills(p.abilities));
+  else if (slice === "abilities") body = card("abilities", renderAbilities(p.abilities, NAV.cur.player));
   else if (slice === "effects") body = card("effects", pills((p.effects || []).map(e => e.repr || e)));
   else if (slice === "quests") body = card("quests", pills(p.quests));
   else if (slice === "nbt") body = card(p.name + " — nbt (raw)", kv(p.nbt));
@@ -677,7 +853,8 @@ function tabComplete() {
   if (acSel >= 0) return acceptAC(acSel);
   if (acItems.length === 1) return acceptAC(0);
   const lcp = commonPrefix(acItems);
-  if (lcp.length > lastTok(cmd.value).length) { setLastTok(lcp); showAC(); }
+  if (lcp.length > lastTok(cmd.value).length) { setLastTok(lcp); showAC(); return; }
+  moveSel(1);
 }
 function recall(d) { if (!HIST.length) return; histIdx = Math.max(0, Math.min(HIST.length, histIdx + d)); cmd.value = HIST[histIdx] || ""; }
 function send(line) { cmd.value = line; runCmd(); }
@@ -720,8 +897,29 @@ refresh();
 
 
 if __name__ == "__main__":
-    print(f"TTRPG UI -> http://localhost:{PORT}   (Ctrl-C to stop)")
-    try:
-        _Server(("localhost", PORT), Handler).serve_forever()
-    except KeyboardInterrupt:
-        print("\nstopped.")
+    # Host the UI in a background thread AND run the normal interactive shell on the main thread,
+    # both sharing repl.WORLD on the SAME session id. So a command typed here applies in the UI and
+    # vice versa (repl.dispatch is lock-serialized, so the two threads can't clobber the world).
+    # The live feeds differ (the terminal redraws its own prompt; the UI re-renders on each /cmd) —
+    # that's fine; state stays in sync. Readline stays on the main thread so TAB/history still work.
+    import threading
+    PORT = _boot_session(sys.argv[1] if len(sys.argv) > 1 else None)  # load your world (or 'new'), pick the port
+    server = _Server(("localhost", PORT), Handler)
+    label = f" '{repl.SESSION_NAME}'" if repl.SESSION_NAME else ""
+    print(f"TTRPG UI{label} -> http://localhost:{PORT}   ({len(repl.WORLD)} characters loaded)")
+    if not sys.stdin.isatty():
+        # Launched in the background (e.g. the `ttrpg` nohup launcher) — no terminal to read from,
+        # so just host the UI forever like before. (repl.run() would hit EOF and exit instantly here.)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nstopped.")
+    else:
+        # Real terminal: host in the background AND run the live shell here, both on the same session.
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        print("This terminal is ALSO a live shell on the same session — type commands here or in the UI.\n")
+        try:
+            repl.run()  # the standard shell loop; shares the world the UI is serving
+        finally:
+            server.shutdown()
+        print("stopped.")

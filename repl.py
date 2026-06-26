@@ -31,18 +31,20 @@ import random
 import shutil
 import string
 import difflib
+import threading
 try:
     import gnureadline as readline  # real GNU readline (enables ordered/tiered listing + 1-tab)
 except ImportError:
     import readline  # macOS falls back to libedit (works, but lists in its own sorted columns)
-from containers import (Player, Mob, Item, Talent, Ability, Effect, Quest, Structure, Cooldown, Cost, Proc, Reaction,
+from containers import (Player, Mob, Item, Talent, Ability, Effect, Quest, Hook, HOOK_CONTEXTS, Structure, Cooldown, Cost, Proc, Reaction,
                         UnitValue, Formula, STAT_NAMES, FORMULA_CONSTANTS,
                         COMBAT_TYPES, COMBAT_RULES,
                         parse_item_text, parse_warnings, add_parse_warning, _fill_generic_nbt,
-                        _split_pairs)
+                        _split_pairs, _nbt_string, _parse_nbt_value, OBJECTIVE_TYPES)
 from autofill import autofill
 
 WORLD = {}  # name -> Player, for this session
+WORLD_HOOKS = {}  # name -> Hook, the session's reusable hook library (the unified proc/reaction/on_* system)
 HISTORY = []  # session log: function-run lines, '---' between player turns, '===' between cycles
 SESSION_DIR = "sessions"
 # A session is keyed by a 4-digit numeric ID that doubles as the UI's localhost port (so the URL is
@@ -327,6 +329,7 @@ CURRENT = None  # @p — the sticky last-used selection; set whenever a concrete
 SELF = None     # @s — the SUBJECT: owner of the proc/function/reaction currently firing (the one acted ON)
 ORIGIN = None   # @o — the ORIGIN/cause: who TRIGGERED the current effect (attacker on a hit, caster of an
                 # ability, owner of a proc). @!o = everyone except them. Set alongside SELF at trigger time.
+AT_POS = None   # the POSITION context (x,y) set by `/execute at`; the reference cell for @[distance=..]
 _INHERIT = object()  # sentinel for _run_function/_apply_reaction: keep the current ORIGIN (don't reset it)
 
 
@@ -376,14 +379,160 @@ def _split_selector(rest):
     return _split_player(rest)
 
 
+def _num(text):
+    """Parse to int/float, or None if it isn't a number."""
+    text = text.strip()
+    try:
+        return int(text)
+    except ValueError:
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+
+def _parse_range(text):
+    """A Minecraft-style numeric range -> (lo, hi) with None = open-ended. 'a..b', '..b', 'a..',
+    or a bare number 'n' (-> (n, n)). Returns None if it isn't a number/range."""
+    text = text.strip()
+    if ".." in text:
+        lo_s, _, hi_s = text.partition("..")
+        lo, hi = _num(lo_s), _num(hi_s)
+        if (lo_s.strip() and lo is None) or (hi_s.strip() and hi is None):
+            return None
+        return (lo, hi)
+    n = _num(text)
+    return (n, n) if n is not None else None
+
+
+def _in_range(value, rng):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    lo, hi = rng
+    return (lo is None or value >= lo) and (hi is None or value <= hi)
+
+
+def _parse_cells(text):
+    """'[2,2]' or '{[2,2],[2,1]}' -> a set of (x,y) cells."""
+    return {(int(x), int(y)) for x, y in re.findall(r"\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]", text)}
+
+
+def _ref_pos():
+    """The reference cell for distance filters: the /execute `at` position, else the @s entity's cell."""
+    if AT_POS is not None:
+        return AT_POS
+    return _entity_pos(SELF) if SELF is not None else None
+
+
+def _match_stats(p, body):
+    """stat=[health=..50, attack=10] — every inner stat condition must hold (ranges or exact)."""
+    if body.startswith("[") and body.endswith("]"):
+        body = body[1:-1]
+    for pair in _split_pairs(body):
+        if "=" not in pair:
+            continue
+        name, _, spec = pair.partition("=")
+        name, spec = name.strip(), spec.strip()
+        val = _effective_stat(p, name) if any(s.name == name for s in p.stat) else None
+        if ".." in spec:
+            if not _in_range(val, _parse_range(spec) or (None, None)):
+                return False
+        elif val != parse_value(spec):
+            return False
+    return True
+
+
+def _match_flags(p, body):
+    """flag=in_combat (must be on) | flag=[in_combat=true, scared=false] — checks proc_state."""
+    body = body.strip()
+    if body.startswith("[") and body.endswith("]"):
+        for pair in _split_pairs(body[1:-1]):
+            if "=" not in pair:
+                continue
+            k, _, v = pair.partition("=")
+            want = v.strip().lower() not in ("false", "0", "no", "")
+            if bool(p.proc_state.get(k.strip(), False)) != want:
+                return False
+        return True
+    return bool(p.proc_state.get(body, False))
+
+
+def _match_collection(p, attr, spec):
+    """quest={villageelder{uuid:qs-1842}} | quest=villageelder | quest={uuid:qs-1842} — true if the
+    entity HOLDS a member matching the name/uuid and/or the nbt fields. attr: quest/talent/ability/
+    effect, or item (-> inventory)."""
+    members = list(p.inventory.items if attr == "item" else (getattr(p, attr, []) or []))
+    spec = spec.strip()
+    if spec.startswith("{") and spec.endswith("}"):
+        spec = spec[1:-1].strip()
+    name, nbt = None, {}
+    if "{" in spec:                                  # name{nbt}
+        try:
+            name, nbt, _ = parse_item_text(spec)
+        except ValueError:
+            name = spec
+    elif ":" in spec:                                # nbt-only: key:val[,key:val] (e.g. uuid:qs-1842)
+        try:
+            _, nbt, _ = parse_item_text("_{" + spec + "}")
+        except ValueError:
+            pass
+    else:                                            # bare name-or-uuid token
+        name = spec
+    for m in members:
+        mname = getattr(m, "name", None) or getattr(m, "type_id", None)
+        muuid = m.nbt.get("uuid") if hasattr(m, "nbt") else None
+        if name is not None and mname != name and muuid != name:
+            continue
+        if nbt and not all((m.field_value(k) if hasattr(m, "field_value") else None) == v for k, v in nbt.items()):
+            continue
+        return True
+    return False
+
+
+_COLLECTION_FILTERS = {"quest", "talent", "ability", "effect", "item"}
+
+
 def _filter_targets(targets, filt):
-    """Keep targets matching every key=value in the filter body (values parsed; field_value compared)."""
-    conditions = []
-    for pair in _split_pairs(filt):
-        if "=" in pair:
-            key, _, value = pair.partition("=")
-            conditions.append((key.strip(), parse_value(value.strip())))
-    return [(n, p) for n, p in targets if all(p.field_value(k) == v for k, v in conditions)]
+    """Keep targets matching every key=value clause (no silent field->stat fallback; namespaces are explicit):
+       distance=<range>           Chebyshev from the `at` position (or @s) — distance=..1, 2.., 2..5
+       pos=[x,y] | pos={[x,y],..} the target stands on one of these cells
+       stat=[health=..50, ...]    stat conditions (ranges or exact)
+       flag=in_combat | flag=[a=true,b=false]   proc_state signals
+       quest|talent|ability|effect|item={name{nbt}}   holds a matching member (by name/uuid and/or nbt)
+       <field>=<range>|<value>    an nbt/core FIELD (species, class, npc, level…) — range or exact equality."""
+    clauses = [(k.strip(), v.strip()) for pair in _split_pairs(filt) if "=" in pair
+               for k, _, v in [pair.partition("=")]]
+    out = []
+    for n, p in targets:
+        keep = True
+        for key, raw in clauses:
+            if key == "distance":
+                ref, rng, d = _ref_pos(), _parse_range(raw), None
+                if ref is not None:
+                    pp = _entity_pos(p)
+                    d = max(abs(ref[0] - pp[0]), abs(ref[1] - pp[1])) if pp is not None else None
+                if rng is None or d is None or not _in_range(d, rng):
+                    keep = False; break
+            elif key == "pos":
+                if _entity_pos(p) not in _parse_cells(raw):
+                    keep = False; break
+            elif key == "stat":
+                if not _match_stats(p, raw):
+                    keep = False; break
+            elif key == "flag":
+                if not _match_flags(p, raw):
+                    keep = False; break
+            elif key in _COLLECTION_FILTERS:
+                if not _match_collection(p, key, raw):
+                    keep = False; break
+            elif ".." in raw:                        # numeric range on an nbt/core field
+                if not _in_range(p.field_value(key), _parse_range(raw) or (None, None)):
+                    keep = False; break
+            elif p.field_value(key) != parse_value(raw):   # exact equality on a field
+                keep = False; break
+        if keep:
+            out.append((n, p))
+    return out
 
 
 def _resolve_base(token):
@@ -729,7 +878,57 @@ def _eval_expr(player, expr):
     return Formula(expr).evaluate(lookup, lookup)
 
 
+STAT_CHANNELS = ("base", "multiplier", "mult", "flat")  # 'mult' is a hidden alias of 'multiplier'
+
+
+def _stat_channel_modify(targets, channel, parts):
+    """The layered modify: adjust a stat's base value, its multiplier, or its flat layer with
+    set|add|reset (reset clears that layer back to its default). Same value logic as /stat modify,
+    including '=EXPR' (evaluated per player). effective = (base + gear) * multiplier + flat
+    (multiplier defaults to 1, flat to 0; kept in nbt stat_mult / stat_flat)."""
+    if len(parts) < 2 or parts[1] not in STAT_OPS:
+        print(f"  usage: /stat modify <selector> {'base|multiplier|flat' if channel not in STAT_CHANNELS else channel} <stat> <set|add|reset> [value]")
+        return False
+    stat, op = parts[0], parts[1]
+    value_text = " ".join(parts[2:])
+    is_expr = value_text.startswith("=")
+    is_mult = channel in ("multiplier", "mult")
+    label = "base" if channel == "base" else ("multiplier" if is_mult else "flat")
+    for name, player in targets:
+        value = _eval_expr(player, value_text[1:]) if is_expr else (parse_value(parts[2]) if len(parts) > 2 else 0)
+        if channel == "base":                   # the base value itself (same layer as /stat new)
+            if op == "reset":
+                player.stat.remove(stat)
+            else:
+                cur = player.stat.get(stat) or 0
+                player.stat.set(stat, value if op == "set" else cur + value)
+            shown = player.stat.get(stat)
+        else:                                    # the multiplier / flat modifier layer (nbt)
+            tkey, default = ("stat_mult", 1) if is_mult else ("stat_flat", 0)
+            table = player.nbt.setdefault(tkey, {})
+            if op == "reset":
+                table.pop(stat, None)
+            else:
+                table[stat] = value if op == "set" else table.get(stat, default) + value
+            shown = table.get(stat, default)
+        player.recompute()
+        detail = "reset" if op == "reset" else f"= {shown}"
+        print(f"  {name}.{label}.{stat} {detail}  (-> {round(_effective_stat(player, stat), 3)})")
+    return True
+
+
 def cmd_stat(rest):
+    """/stat new|get|list|remove ...  AND  /stat modify <selector> [base|multiplier|flat] <stat>
+    <set|add|reset> [value]. With no channel keyword, modify acts on the base value (as before);
+    base|multiplier|flat target that layer of  effective = (base + gear) * multiplier + flat."""
+    sub, _, arg = rest.partition(" ")
+    sub = sub.strip()
+    if sub == "modify":                          # the ONLY layered form: /stat modify <sel> <channel> <stat> <op>
+        sel, remainder = _split_selector(arg)
+        parts = remainder.split()
+        if parts and parts[0] in STAT_CHANNELS:
+            targets = _resolved(sel)
+            return _stat_channel_modify(targets, parts[0], parts[1:]) if targets is not None else False
     return _value_command(rest, "stat", "stat")
 
 
@@ -843,31 +1042,224 @@ def _parse_element_specs(text):
 
 
 def _grant_equip_effects(player, item):
-    """On equip: grant talents from the item's `talents` nbt (each TAGGED with _equipped_by so it
-    auto-removes on unequip — continuous effects), then fire a one-shot `on_equip` REACTION
-    (class-path deltas AND/OR function calls — NOT auto-undone). Passive STAT bonuses are NOT here —
-    they fold in live via recompute (auto-reversible)."""
-    for type_id, nbt in _parse_element_specs(item.nbt.get("talents")):
-        talent = Talent.from_nbt(type_id, nbt)
-        talent.nbt["_equipped_by"] = item.type_id  # tag for removal on unequip
-        player.talent.add(talent)
-    if item.nbt.get("on_equip"):
-        _apply_reaction(player, Reaction.parse(item.nbt["on_equip"]))
-    # when_equipped: sticky signals kept ON for as long as the item is worn (continuous procs).
-    _report_fired(player.name, _enable_procs(player, _proc_tokens(item.nbt.get("when_equipped"))))
+    """One-shot EVENT side of equipping (not the continuous grants — those are derived by
+    _regrant_items): fire the `on_equip` REACTION (deltas/functions, NOT auto-undone) and pulse
+    'item_equipped' + any on_equip_proc. Continuous talents/abilities/effects/quests/flags come from
+    the item's `grants`/`while_held` nbt and are (re)applied by _refresh_inventory."""
     _report_fired(player.name, _pulse_procs(player, ["item_equipped"] + _proc_tokens(item.nbt.get("on_equip_proc"))))
+    _report_fired(player.name, _emit(player, "equip", origin=player, subject=item))   # on_equip is now an on:equip hook
 
 
 def _revoke_equip_effects(player, item):
-    """On unequip: remove talents this item granted (tagged _equipped_by), turn OFF the item's
-    when_equipped signals, fire on_unequip REACTION, then pulse 'item_unequipped' + any on_unequip_proc."""
-    for talent in list(player.talent):
-        if talent.nbt.get("_equipped_by") == item.type_id:
-            player.talent.remove(talent)
-    _disable_procs(player, _proc_tokens(item.nbt.get("when_equipped")))
-    if item.nbt.get("on_unequip"):
-        _apply_reaction(player, Reaction.parse(item.nbt["on_unequip"]))
+    """One-shot EVENT side of unequipping: fire on_unequip REACTION + pulse 'item_unequipped' + any
+    on_unequip_proc. Continuous grants are removed by _refresh_inventory once the item leaves the slot."""
     _report_fired(player.name, _pulse_procs(player, ["item_unequipped"] + _proc_tokens(item.nbt.get("on_unequip_proc"))))
+    _report_fired(player.name, _emit(player, "unequip", origin=player, subject=item))   # on_unequip is now an on:unequip hook
+
+
+# --- derived item grants: talents/abilities/effects/quests/flags an item confers while HELD (in the
+# inventory) and/or while EQUIPPED. Recomputed from scratch on every possession change (like the
+# equipped-stat bonus), so they're auto-reversible, save/load-safe, and edit-safe. ----------------
+_GRANT_KINDS = {"talent": "talent", "ability": "ability", "effect": "effect", "quest": "quest"}
+
+
+def _grant_specs(value):
+    """Parse a grant list into [(kind, body), ...]. kind in talent|ability|effect|quest|flag; body is
+    an element spec ('fireproof', 'fireball{cooldown:3}') or a flag token ('blessed', 'cursed:false').
+    A bare entry with no recognized kind: prefix defaults to a talent (back-compat with `talents`).
+    Accepts either a real list (the nbt parser yields one when there are no nested braces) or a raw
+    bracket string (it falls back to raw text when an element carries its own {nbt})."""
+    if isinstance(value, (list, tuple)):
+        chunks = [str(c) for c in value]
+    else:
+        text = str(value or "").strip()
+        if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+        chunks = _split_pairs(text)
+    out = []
+    for chunk in chunks:
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        kind, sep, body = chunk.partition(":")
+        kind = kind.strip().lower()
+        if sep and kind in _GRANT_KINDS or kind == "flag":
+            out.append((kind, body.strip()))
+        else:
+            out.append(("talent", chunk))   # bare 'fireproof' -> a talent grant
+    return out
+
+
+def _item_grant_source(item):
+    return item.nbt.get("uuid") or item.type_id   # stable per-item id for tagging (uuid if minted)
+
+
+def _is_item_granted(el):
+    """True if an element was conferred by an item (so it's derived, not persisted)."""
+    return bool(el.nbt.get("_granted_by") or el.nbt.get("_equipped_by"))
+
+
+def _desired_grants(player):
+    """The grants every possessed item SHOULD currently confer:
+       {(source, kind, key): (kind, body, source)}  — key = element name or flag name (nbt-independent
+       so re-grants are stable). while_held applies whenever possessed; grants/when_equipped/legacy
+       `talents` apply only while the item sits in an equipment slot."""
+    desired = {}
+    possessed = [(it, False) for it in player.inventory.items]
+    for items in player.equipment.equipped().values():
+        possessed += [(it, True) for it in items]
+    for item, equipped in possessed:
+        source = _item_grant_source(item)
+        specs = list(_grant_specs(item.nbt.get("while_held")))
+        if equipped:
+            specs += _grant_specs(item.nbt.get("grants"))
+            specs += _grant_specs(item.nbt.get("talents"))                       # legacy equipped talents
+            specs += [("flag", t) for t in _proc_tokens(item.nbt.get("when_equipped"))]
+        for kind, body in specs:
+            key = _signal_value(body)[0] if kind == "flag" else parse_item_text(body)[0]
+            desired[(source, kind, key)] = (kind, body, source)
+    return desired
+
+
+def _regrant_items(player):
+    """Make the player's granted talents/abilities/effects/quests/flags match _desired_grants: remove
+    granted ones no longer conferred, add newly-conferred ones (preserving any whose source+kind+name
+    still holds, so ability cooldowns / effect timers don't reset every recompute)."""
+    desired = _desired_grants(player)
+    sets = {"talent": player.talent, "ability": player.ability, "effect": player.effect, "quest": player.quest}
+    builders = {"talent": Talent, "ability": Ability, "effect": Effect, "quest": Quest}
+    present = set()
+    for kind, setobj in sets.items():
+        for el in list(setobj):
+            src = el.nbt.get("_granted_by") or el.nbt.get("_equipped_by")   # _equipped_by = legacy tag
+            if src is None:
+                continue
+            key = (src, kind, el.name)
+            if key in desired:
+                present.add(key)
+            else:
+                setobj.remove(el)
+    for (source, kind, name), (k, body, src) in desired.items():
+        if kind == "flag" or (source, kind, name) in present:
+            continue
+        type_id, nbt, _ = parse_item_text(body)
+        el = builders[kind].from_nbt(type_id, dict(nbt))
+        el.nbt["_granted_by"] = source
+        el.nbt["_granted"] = True
+        sets[kind].add(el)
+    # flags: diff against the set we granted last time so we never clear a manually-set, non-granted flag
+    want = {}
+    for (source, kind, key), (k, body, src) in desired.items():
+        if kind == "flag":
+            name, val = _signal_value(body)
+            want[name] = val
+    prev = set(player.nbt.get("_granted_flags") or [])
+    for f in prev - set(want):
+        player.proc_state.pop(f, None)
+    player.proc_state.update(want)
+    player.nbt["_granted_flags"] = sorted(want)
+
+
+# ---- INVENTORY SPACE (grid containers) -------------------------------------------------------
+# A player's grid inventory is a list of CONTAINERS. The BASE set lives in the player's
+# `inventory_space` nbt (a raw "[{...}]" string, like proc); equipped/held items that declare
+# their own `inventory_space` APPEND more containers (a backpack, pockets, cybernetic module slots).
+# Each container: {id, label, color, style, cells:[[r,c],...]}. `cells` is a free-form mask so a
+# grid can be non-rectangular (rows/cols appended one at a time). Items carry a footprint
+# `shape:[[r,c],...]` and a placement `pos:{c:<container id>,x,y,r}`. Zero-shape items take no grid
+# space (they live in the loose bin). All of this is data the UI authors; the engine just stores it.
+DEFAULT_CONTAINER = {"id": "pack", "label": "Pack", "color": "#6f8fae", "style": "round",
+                     "cells": [[r, c] for r in range(4) for c in range(6)]}
+
+
+def _parse_space(value):
+    """Parse an inventory_space value (raw "[{...},{...}]" string, or an already-parsed list) into a
+    list of container dicts. Tolerant: empty/garbage -> []."""
+    if isinstance(value, list):
+        return [dict(c) for c in value if isinstance(c, dict)]
+    text = str(value or "").strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        return []
+    out = []
+    for chunk in _split_pairs(text[1:-1]):
+        chunk = chunk.strip()
+        if not chunk.startswith("{"):
+            continue
+        try:
+            _, nbt, _ = parse_item_text("_" + chunk)
+        except ValueError:
+            continue
+        out.append(nbt)
+    return out
+
+
+def _space_to_text(containers):
+    """Render a list of container dicts back to a raw "[{...}]" string for storage in nbt."""
+    return "[" + ",".join(_nbt_string(c) for c in containers) + "]"
+
+
+def _base_containers(player):
+    """The player's OWN containers (source 'base'), parsed from nbt."""
+    return _parse_space(player.nbt.get("inventory_space"))
+
+
+def _base_or_default(player):
+    """Base containers, or the implicit default (materialized) when none are set yet — so the
+    default 'pack' the UI shows becomes a real, editable container the moment it's touched."""
+    return _base_containers(player) or [dict(DEFAULT_CONTAINER)]
+
+
+def _write_base_containers(player, containers):
+    player.nbt["inventory_space"] = _space_to_text(containers)
+
+
+def _reveal_active(player, reveal):
+    """A container's `reveal` gate: the container only appears while this flag/proc is active in the
+    player's proc_state. Equipping (via when_equipped), a use-toggle, an on_equip that sets a flag,
+    etc. are all just ways to turn it on — same proc_state that `flag=` conditions read."""
+    return bool(player.proc_state.get(str(reveal), False))
+
+
+def _effective_inventory_space(player):
+    """The player's LIVE container list: base containers + any contributed by possessed items
+    (held OR equipped). A contributed container's id is namespaced by its source uuid so two
+    backpacks never collide; `source` records provenance ('base' or the item's uuid). A container
+    carrying `reveal:<flag>` only shows while that flag/proc is active (so a backpack reveals its
+    space only once worn/used, not just carried)."""
+    out = []
+    base = _base_containers(player)
+    for cont in base:
+        cont = dict(cont)
+        cont.setdefault("source", "base")
+        if cont.get("reveal") and not _reveal_active(player, cont["reveal"]):
+            continue
+        out.append(cont)
+    if not base:
+        out.append(dict(DEFAULT_CONTAINER, source="base"))
+    possessed = list(player.inventory.items)
+    for items in player.equipment.equipped().values():
+        possessed += items
+    for item in possessed:
+        provided = _parse_space(item.nbt.get("inventory_space"))
+        if not provided:
+            continue
+        src = _item_grant_source(item)
+        for cont in provided:
+            cont = dict(cont)
+            if cont.get("reveal") and not _reveal_active(player, cont["reveal"]):
+                continue
+            cont["id"] = f"{src}:{cont.get('id') or 'c'}"
+            cont["source"] = src
+            cont.setdefault("label", item.name or item.type_id)
+            out.append(cont)
+    return out
+
+
+def _refresh_inventory(player):
+    """Re-derive item grants, then recompute stats. Call after ANY possession change (equip, unequip,
+    use/consume, add, remove, loot, load)."""
+    _regrant_items(player)
+    player.recompute()
 
 
 def _equip_weapon(player, item, wield):
@@ -905,15 +1297,28 @@ def _equip_weapon(player, item, wield):
     player.inventory.remove(item)
     player.equipment.equip(target, item)
     _grant_equip_effects(player, item)
-    player.recompute()
+    _refresh_inventory(player)
     where = "both hands" if wield == "both" else target
     print(f"  {player.name} wields {item.type_id} ({where})" + (f"; displaced {displaced}" if displaced else ""))
 
 
+def _is_uuid_token(token):
+    """True if `token` is a bare uuid like 'it-aB3x' (2-char type code, dash, 4 base62)."""
+    return bool(re.fullmatch(r"[A-Za-z0-9]{2}-[A-Za-z0-9]{4}", token.strip()))
+
+
+def _inv_item(player, token):
+    """Find an inventory item by bare UUID (exact, unambiguous) OR by name/type_id (legacy)."""
+    if _is_uuid_token(token):
+        return next((it for it in player.inventory.items if it.nbt.get("uuid") == token.strip()), None)
+    return player.inventory.get(token)
+
+
 def _item_equip(arg):
-    """/item equip <selector> <item> [slot]  — equip an inventory item.
-    Weapons (nbt 'wield' main/off/both) go to hand slots with swap logic; other gear uses 'equippable'
-    + the per-race capacity in equip_slots. Slot inferred when 'equippable' lists exactly one."""
+    """/item equip <selector> <item-or-uuid> [slot]  — equip an inventory item.
+    <item> may be a bare UUID (it-XXXX — exact, handles names with spaces / duplicate names), or a
+    name/type_id. Weapons (nbt 'wield' main/off/both) go to hand slots with swap logic; other gear
+    uses 'equippable' + the per-race capacity in equip_slots."""
     sel, remainder = _split_selector(arg)
     targets = _resolved(sel)
     if targets is None:
@@ -924,12 +1329,15 @@ def _item_equip(arg):
         return False
     item_name, slot = parts[0], (parts[1] if len(parts) > 1 else None)
     for name, player in targets:
-        item = player.inventory.get(item_name)
+        item = _inv_item(player, item_name)
         if item is None:
             print(f"  {name} has no '{item_name}' in inventory")
             continue
         wield = item.nbt.get("wield")
-        if wield in ("main", "off", "both"):  # weapons -> hand slots (with replacement)
+        hand_slot = slot in ("main_hand", "off_hand", "main", "off", "both")
+        # weapons go to hand slots — UNLESS the user explicitly named a different (non-hand) slot
+        # (an item can be both wieldable AND wearable, e.g. a ring-dagger; the named slot wins)
+        if wield in ("main", "off", "both") and (slot is None or hand_slot):
             _equip_weapon(player, item, wield)
             continue
         equippable = item.nbt.get("equippable")
@@ -952,7 +1360,7 @@ def _item_equip(arg):
         player.inventory.remove(item)
         player.equipment.equip(chosen, item)
         _grant_equip_effects(player, item)
-        player.recompute()
+        _refresh_inventory(player)
         print(f"  {name} equipped {item.type_id} in {chosen} ({len(player.equipment.equipped(chosen))}/{cap})")
     return True
 
@@ -972,7 +1380,7 @@ def _item_unequip(arg):
         worn = player.equipment.equipped()  # {slot: [items]}
         pairs = ([(key, it) for it in list(worn[key])] if key in worn
                  else [(slot, it) for slot, items in worn.items() for it in list(items)
-                       if it.name == key or it.type_id == key])
+                       if it.name == key or it.type_id == key or it.nbt.get("uuid") == key])
         removed = []
         for slot, item in pairs:
             player.equipment.unequip(slot, item)
@@ -980,7 +1388,7 @@ def _item_unequip(arg):
             _revoke_equip_effects(player, item)
             removed.append(f"{item.type_id} from {slot}")
         if removed:
-            player.recompute()
+            _refresh_inventory(player)
             print(f"  {name} unequipped " + ", ".join(removed))
         else:
             print(f"  {name} has nothing equipped matching '{key}'")
@@ -1014,6 +1422,7 @@ def _item_add(arg):
         if qty is not None:
             item.quantity = qty
         player.inventory.add(item)
+        _refresh_inventory(player)   # a held item may confer while_held grants
         print(f"  gave {name}: {item}")
     return True
 
@@ -1045,6 +1454,7 @@ def _item_remove(arg):
             continue
         n = explicit if explicit is not None else item.quantity
         taken = _take_from_stack(inv, item, n)
+        _refresh_inventory(player)   # losing a held item drops its while_held grants
         print(f"  {name}: removed {taken.quantity}x {taken.type_id}")
         ok = True
     return ok
@@ -1091,7 +1501,7 @@ def _select_item(inv, selector):
     if bracket:
         idx = int(bracket.group(1))
         if 0 <= idx < len(inv.items):
-            return inv.items[idx], 1, None
+            return inv.items[idx], inv.items[idx].quantity, None  # the WHOLE entry/stack at index N
         return None, 1, f"no item at index {idx} (inventory has {len(inv.items)})"
     # a trailing [N] on a type/name selects the Nth matching stack
     nth = None
@@ -1150,6 +1560,70 @@ def _item_modify(arg):
     return ok
 
 
+def _item_place(arg):
+    """/item place <selector> <item-uuid> <container> <x> <y> [rot]
+    Set an item's grid placement (the WHOLE stack — no split, so a stack stays one footprint).
+    x=col, y=row (top-left of the footprint), rot in {0,90,180,270}. The container id is whatever
+    /state reports for the player (base or an item-provided 'src:id')."""
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    parts = remainder.split()
+    if len(parts) < 4:
+        print("  usage: /item place <selector> <item-uuid> <container> <x> <y> [rot]")
+        return False
+    token, container, xs, ys = parts[0], parts[1], parts[2], parts[3]
+    rot = parts[4] if len(parts) > 4 else None
+    ok = False
+    for name, player in targets:
+        item = _inv_item(player, token)
+        if item is None:
+            print(f"  {name}: no item '{token}' in inventory")
+            continue
+        if container in ("none", "-", "__loose__"):   # unplace -> back to the loose bin
+            item.nbt.pop("pos", None)
+            print(f"  {name}: unplaced {item.type_id} (loose)")
+            ok = True
+            continue
+        try:
+            x, y = int(xs), int(ys)
+        except ValueError:
+            print("  x and y must be integers")
+            continue
+        cur_r = int((item.nbt.get("pos") or {}).get("r", 0))
+        item.nbt["pos"] = {"c": container, "x": x, "y": y, "r": int(rot) if rot is not None else cur_r}
+        print(f"  {name}: placed {item.type_id} -> {container} ({x},{y}) r{item.nbt['pos']['r']}")
+        ok = True
+    return ok
+
+
+def _item_rotate(arg):
+    """/item rotate <selector> <item-uuid> [deg]  — turn an item's footprint by deg (default 90)."""
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    parts = remainder.split()
+    if not parts:
+        print("  usage: /item rotate <selector> <item-uuid> [deg]")
+        return False
+    token = parts[0]
+    deg = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else 90
+    ok = False
+    for name, player in targets:
+        item = _inv_item(player, token)
+        if item is None:
+            print(f"  {name}: no item '{token}' in inventory")
+            continue
+        pos = dict(item.nbt.get("pos") or {})
+        pos["r"] = (int(pos.get("r", 0)) + deg) % 360
+        item.nbt["pos"] = pos
+        print(f"  {name}: rotated {item.type_id} -> r{pos['r']}")
+        ok = True
+    return ok
+
+
 def _roll_loot(table):
     """DUMMY loot roll. Endgame: load loottables from CSV/JSON (items + chances) keyed
     by name like 'boss:cyclops', roll against them, return the drops. For now: one stub."""
@@ -1168,11 +1642,12 @@ def _item_loot(arg):
     for name, player in targets:
         item = _roll_loot(table)
         player.inventory.add(item)
+        _refresh_inventory(player)
         print(f"  [loot: DUMMY — real loottables come later] rolled '{table}' -> gave {name}: {item}")
     return True
 
 
-ITEM_SUBS = ["new", "equip", "unequip", "use", "remove", "loot", "modify", "list"]  # 'add'/'give' = hidden aliases of 'new'
+ITEM_SUBS = ["new", "equip", "unequip", "use", "remove", "loot", "modify", "list", "place", "rotate"]  # 'add'/'give' = hidden aliases of 'new'
 
 
 def _item_use(arg):
@@ -1194,7 +1669,7 @@ def _item_use(arg):
         if item is None:
             print(f"  {name} has no '{item_name}' in inventory")
             continue
-        changes = _apply_reaction(player, Reaction.parse(item.nbt["on_use"]), origin=player) if item.nbt.get("on_use") else []
+        used = _emit(player, "use", origin=player, subject=item)   # on_use is now an on:use hook
         signals = ["item_used"] + _proc_tokens(item.nbt.get("on_use_proc"))
         consume = item.nbt.get("consume")
         qty = int(consume) if isinstance(consume, (int, float)) else (int(consume) if isinstance(consume, str) and consume.isdigit() else (1 if consume else 0))
@@ -1207,10 +1682,10 @@ def _item_use(arg):
                 player.inventory.remove(item)
             consumed = qty
             signals.append("item_consumed")
-        player.recompute()
-        detail = f" ({', '.join(changes)})" if changes else ""
-        print(f"  {name} uses {item.type_id}{detail}" + (f"; consumed {consumed}" if consumed else "")
+        _refresh_inventory(player)   # consuming a held item may drop its while_held grants
+        print(f"  {name} uses {item.type_id}" + (f"; consumed {consumed}" if consumed else "")
               + f"; pulsed {', '.join(signals)}")
+        _report_fired(name, used)
         _report_fired(name, _pulse_procs(player, signals))
     return True
 
@@ -1221,11 +1696,137 @@ def cmd_item(rest):
     # 'new' is canonical (consistent with /character new etc.); 'add'/'give' are hidden aliases.
     handler = {"new": _item_add, "add": _item_add, "give": _item_add, "remove": _item_remove,
                "equip": _item_equip, "unequip": _item_unequip, "use": _item_use,
-               "loot": _item_loot, "modify": _item_modify, "list": _item_list}.get(sub)
+               "loot": _item_loot, "modify": _item_modify, "list": _item_list,
+               "place": _item_place, "rotate": _item_rotate}.get(sub)
     if handler:
         return handler(arg)
     print("  usage: /item new <selector> <item>  |  equip <selector> <item> [slot]  |  unequip <selector> <item-or-slot>  |  "
-          "use <selector> <item>  |  remove <selector> <item> [count]  |  loot <table> <selector>  |  modify <selector> <item> <set|add|reset> {nbt}  |  list <selector>")
+          "use <selector> <item>  |  remove <selector> <item> [count]  |  loot <table> <selector>  |  modify <selector> <item> <set|add|reset> {nbt}  |  list <selector>  |  place <selector> <uuid> <container> <x> <y> [rot]  |  rotate <selector> <uuid> [deg]")
+    return False
+
+
+# --- /container (grid inventory containers) ----------------------------------
+CONTAINER_SUBS = ["new", "modify", "delete", "list"]
+
+
+def _apply_container_op(cont, rest):
+    """set|add|reset on a plain container dict. `add cells [[r,c],...]` appends cells; everything else
+    replaces. Bare 'field value' (no op word) means set."""
+    m = re.match(r"^(set|add|reset)\s+(.*)$", rest.strip(), re.DOTALL)
+    if not m:
+        field, _, val = rest.strip().partition(" ")
+        if field:
+            cont[field.strip()] = _parse_nbt_value(val.strip())
+        return
+    op, tail = m.group(1), m.group(2).strip()
+    if op == "reset":
+        for key in tail.split():
+            cont.pop(key, None)
+        return
+    field, _, val = tail.partition(" ")
+    field, value = field.strip(), _parse_nbt_value(val.strip())
+    if op == "add" and field == "cells" and isinstance(cont.get("cells"), list) and isinstance(value, list):
+        cont["cells"] = cont["cells"] + value
+    else:
+        cont[field] = value
+
+
+def _container_new(arg):
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    head = remainder.strip()
+    idm = re.match(r"([\w:-]+)", head)
+    if not idm:
+        print("  usage: /container new <selector> <id>[{label:..,color:..,style:..,cells:[[r,c],...]}]")
+        return False
+    cid, body = idm.group(1), head[idm.end():].strip()
+    nbt = parse_item_text("_" + body)[1] if body.startswith("{") else {}
+    ok = False
+    for name, player in targets:
+        conts = _base_or_default(player)   # keep the implicit default visible alongside a new one
+        if any(str(c.get("id")) == cid for c in conts):
+            print(f"  {name}: container '{cid}' already exists")
+            continue
+        conts.append({"id": cid, "label": nbt.get("label", cid), "color": nbt.get("color", "#6f8fae"),
+                      "style": nbt.get("style", "round"),
+                      "cells": nbt.get("cells") or [[r, c] for r in range(4) for c in range(6)]})
+        _write_base_containers(player, conts)
+        print(f"  {name}: added container '{cid}'")
+        ok = True
+    return ok
+
+
+def _container_modify(arg):
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    parts = remainder.split(None, 1)
+    if len(parts) < 2:
+        print("  usage: /container modify <selector> <id> <set|add|reset> <field> <value>")
+        return False
+    cid, rest = parts[0], parts[1].strip()
+    ok = False
+    for name, player in targets:
+        conts = _base_or_default(player)   # materialize the default so editing it persists
+        cont = next((c for c in conts if str(c.get("id")) == cid), None)
+        if cont is None:
+            print(f"  {name}: no base container '{cid}'")
+            continue
+        _apply_container_op(cont, rest)
+        _write_base_containers(player, conts)
+        print(f"  {name}: container '{cid}' -> {_nbt_string(cont)}")
+        ok = True
+    return ok
+
+
+def _container_delete(arg):
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    cid = remainder.strip()
+    if not cid:
+        print("  usage: /container delete <selector> <id>")
+        return False
+    ok = False
+    for name, player in targets:
+        conts = _base_containers(player)
+        kept = [c for c in conts if str(c.get("id")) != cid]
+        if len(kept) == len(conts):
+            print(f"  {name}: no base container '{cid}'")
+            continue
+        _write_base_containers(player, kept)
+        print(f"  {name}: deleted container '{cid}'")
+        ok = True
+    return ok
+
+
+def _container_list(arg):
+    targets = _resolved(arg.strip())
+    if targets is None:
+        return False
+    for name, player in targets:
+        conts = _effective_inventory_space(player)
+        print(f"  {name} containers ({len(conts)}):")
+        for c in conts:
+            print(f"    {c.get('id')} [{c.get('source', 'base')}] '{c.get('label')}' "
+                  f"{len(c.get('cells') or [])} cells {c.get('style')} {c.get('color')}")
+    return True
+
+
+def cmd_container(rest):
+    """/container new|modify|delete|list — edit a player's BASE grid containers (the inventory_space
+    nbt). Item-provided containers (backpacks/pockets) come from the item, not edited here."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    handler = {"new": _container_new, "modify": _container_modify,
+               "delete": _container_delete, "list": _container_list}.get(sub)
+    if handler:
+        return handler(arg)
+    print("  usage: /container new <selector> <id>{...}  |  modify <selector> <id> set <field> <value>  |  delete <selector> <id>  |  list <selector>")
     return False
 
 
@@ -1291,10 +1892,21 @@ def _effective_attacker(attacker, weapons, attack_override=None):
     return eff
 
 
+def _stat_components(entity, name):
+    """The (base, mult, flat) of a stat. base = stored/derived value + equipped-gear base bonus;
+    mult (default 1) and flat (default 0) are the modifier layer kept in nbt stat_mult / stat_flat
+    (set via /stat mult|flat, and later by gear)."""
+    base = (entity.stat.get(name) or 0) + entity._equipped_stat_bonus().get(name, 0)
+    mult = (entity.nbt.get("stat_mult") or {}).get(name, 1)
+    flat = (entity.nbt.get("stat_flat") or {}).get(name, 0)
+    return base, mult, flat
+
+
 def _effective_stat(entity, name):
-    """A stat INCLUDING equipped non-weapon gear (recompute folds those into BASE-stat reads but
-    doesn't bake them into the stored value, so armor_class/defense read 0 otherwise)."""
-    return (entity.stat.get(name) or 0) + entity._equipped_stat_bonus().get(name, 0)
+    """The stat's final value: (base + gear) * mult + flat. Defaults (mult 1, flat 0) leave it equal
+    to base+gear, so this is backward-compatible until a multiplier/flat is set."""
+    base, mult, flat = _stat_components(entity, name)
+    return base * mult + flat
 
 
 def _resolve_damage(eff, target, explicit=None):
@@ -1323,9 +1935,14 @@ def _resolve_damage(eff, target, explicit=None):
             raw *= (1 - ac_efficiency)         # ...then it ignores armor_class_efficiency of them
         pen = float(eff.stat.get(spec["penetration"]) or 0) if spec["penetration"] else 0.0
         res = float(target.stat.get(spec["defense"]) or 0) if spec["defense"] else 0.0
-        rule = COMBAT_RULES.get(spec["channel"], "atk.raw")
+        # the rule is PER-ATTACKER: their own nbt 'combat_rules' override, else the shared default.
+        # It may reference the attacker's own stats (stat.crit_chance, …) — those resolve per-player,
+        # so adding stat.crit_chance to a rule affects only attackers who actually have that stat.
+        own = eff.nbt.get("combat_rules")
+        rule = (own.get(spec["channel"]) if isinstance(own, dict) else None) or COMBAT_RULES.get(spec["channel"], "atk.raw")
         atk_vals, def_vals = {"raw": raw, "pen": pen}, {"res": res}
-        net = Formula(rule).evaluate(lambda n: 0, lambda n: 0,
+        atk_stat = lambda n: (eff.stat.get(n) or 0)
+        net = Formula(rule).evaluate(atk_stat, atk_stat,
                                      namespaces={"atk": atk_vals.get, "def": def_vals.get})
         total += net
         breakdown.append((typ, round(raw, 2), round(net, 2)))
@@ -1439,9 +2056,10 @@ def cmd_attack(rest):
 # --- /move (grid movement, speed-gated, Chebyshev) ---------------------------
 
 def cmd_move(rest):
-    """/move <selector> <x> <y>   step onto a cell, gated by the mover's `speed` in tiles
-    (Chebyshev: diagonals count as 1). First placement (no current pos) is free; after that the
-    step must be <= effective speed. GM teleport with NO speed check: /map pos <player> <x> <y>."""
+    """/move <selector> <x> <y>   WALK to a cell one tile at a time (diagonal-first, so it reads as the
+    shortest path), gated by the mover's `speed` (Chebyshev distance ≤ speed). The mover reveals/dims
+    every tile along the way (per their reveal_radius/dim_radius). The FIRST placement (no current pos)
+    just drops them on the tile. GM teleport with NO walk / NO speed check: /map pos <player> <x> <y>."""
     sel, remainder = _split_selector(rest)
     targets = _resolved(sel)
     if targets is None:
@@ -1453,19 +2071,34 @@ def cmd_move(rest):
     x, y = nums[0], nums[1]
     for name, mover in targets:
         cur = _entity_pos(mover)
-        speed = _effective_stat(mover, "speed")
-        if cur is not None:
-            step = max(abs(x - cur[0]), abs(y - cur[1]))  # Chebyshev tiles
+        is_player = not _is_mob(mover)
+        reveal_r, dim_r = _vision_radii(mover)
+        if cur is None:                                  # first placement: just drop onto the tile
+            _set_entity_pos(mover, x, y)
+            mover.recompute()
+            if is_player:
+                _mark_vision(name, x, y, reveal_r, dim_r)
+            print(f"  {name} placed at ({x},{y})")
+        else:
+            step = max(abs(x - cur[0]), abs(y - cur[1]))  # Chebyshev tiles to cover
+            speed = _effective_stat(mover, "speed")
             if step > speed:
                 print(f"  {name} can't reach ({x},{y}) — {step} tiles away, speed {speed:g}")
                 continue
-            _set_entity_pos(mover, x, y)
+            cx, cy, walked = cur[0], cur[1], 0            # walk one tile per step, diagonal-first
+            while (cx, cy) != (x, y):
+                cx += (x > cx) - (x < cx)                 # sign(dx): diagonal while both differ, then straight
+                cy += (y > cy) - (y < cy)                 # sign(dy)
+                _set_entity_pos(mover, cx, cy)
+                if is_player:
+                    _mark_vision(name, cx, cy, reveal_r, dim_r)
+                walked += 1
             mover.recompute()
-            print(f"  {name} moves to ({x},{y})  ({step} tile{'s' if step != 1 else ''})")
-        else:
-            _set_entity_pos(mover, x, y)
-            mover.recompute()
-            print(f"  {name} placed at ({x},{y})")
+            print(f"  {name} walks to ({x},{y})  ({walked} tile{'s' if walked != 1 else ''})")
+        grew = _auto_expand_near(x, y)
+        if grew:
+            print(f"    (map auto-expanded {', '.join(grew)} — staying ahead of the edge)")
+        _save_map()
     return True
 
 
@@ -1522,6 +2155,31 @@ def _fire_effect(player, effect):
     print(f"  [turn {TURN}] {player.name}: effect {effect.name} fired{detail}")
 
 
+def _fire_element_hook(player, element, hook):
+    """An element was gained/lost: fire its gain/lose HOOKS through the bus. (The legacy on_apply/
+    on_clear Reaction fields were migrated onto hooks, so the bespoke firing here is gone.)"""
+    event = {"on_apply": "gain", "on_clear": "lose"}.get(hook, hook)
+    _report_fired(player.name, _emit(player, event, origin=player, subject=element))
+
+
+def _clear_effect(player, effect):
+    """The single effect-removal path: remove it, THEN fire on_clear (remove-first so an on_clear that
+    re-pulses procs can't re-trigger this same effect's clear)."""
+    if effect not in list(player.effect):
+        return
+    player.effect.remove(effect)
+    _fire_element_hook(player, effect, "on_clear")
+
+
+def _check_effect_clears(player):
+    """Clear any effect whose `clear_when` Proc matches the player's current proc-state (then on_clear
+    fires). Called wherever proc-state changes — so a `/proc` pulse/enable ends the effect at once."""
+    for effect in list(player.effect):
+        cw = effect.field_value("clear_when")
+        if isinstance(cw, Proc) and cw.clauses and cw.matches(player.proc_state):
+            _clear_effect(player, effect)
+
+
 def _tick_effects(player):
     """One turn passes for each effect: if this is a firing turn (per its step schedule), fire
     it (pulse proc + reaction); then count duration down and remove at 0. Effects with neither
@@ -1540,7 +2198,7 @@ def _tick_effects(player):
         effect._elapsed += 1
         new_duration = int(duration) - 1
         if new_duration <= 0:
-            player.effect.remove(effect)
+            _clear_effect(player, effect)   # fires on_clear, then removes
         else:
             effect.modify(duration=new_duration)
 
@@ -1632,7 +2290,6 @@ def _next_player_turn():
 def cmd_turn(rest):
     """/turn                     whose turn it is + the world turn
        /turn next                end the current player's turn, begin the next (world turn ticks on wrap)
-       /turn next cycle          run a full cycle (one turn for every player)
        /turn next <selector>     advance just that player's turn (their stats.turn), out of order
        /turn set <n> | add <n>   move the WORLD turn directly (for the calendar; no player ticking)"""
     global TURN, TURN_ACTIVE
@@ -1648,15 +2305,6 @@ def cmd_turn(rest):
             name = _next_player_turn()
             if name:
                 print(f"  now {name}'s turn  (their stats.turn = {WORLD[name].stat.get('turn')})")
-            return TURN
-        if arg == "cycle":
-            order = _turn_order()
-            if not order:
-                print("  no players in the turn order")
-                return False
-            for _ in range(len(order)):
-                _next_player_turn()
-            print(f"  ran a full cycle  |  world turn {TURN}  |  active: {TURN_ACTIVE}")
             return TURN
         targets = _resolved(arg)  # /turn next <selector>: just advance those players' own turns
         if targets is None:
@@ -1675,7 +2323,7 @@ def cmd_turn(rest):
         print(f"  world turn -> {TURN}: {_format_date(TURN).strip()}")
         _fire_due_events(TURN)  # fire any queued events now due
         return TURN
-    print("  usage: /turn [query] | next [cycle|<selector>] | add <n> | set <n>")
+    print("  usage: /turn [query] | next [<selector>] | add <n> | set <n>")
     return False
 
 
@@ -1687,7 +2335,9 @@ def cmd_turn(rest):
 TURNS_PER_DAY = 8          # how many turns make a day (provisional; user may retune)
 DAYS_PER_MONTH = 26
 REGULAR_MONTHS = 13        # months 1..13 each have DAYS_PER_MONTH days (13th = Sol)
-MONTH_NAMES = {13: "Sol", 14: "Lanus"}  # months 1..12 are unnamed for now ("Month N")
+MONTH_NAMES = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+               7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December",
+               13: "Sol", 14: "Lanus"}  # 13th = Sol, 14th = Lanus (New Year, 1 day; 2 on a leap year)
 
 
 def _is_leap(year):
@@ -1743,6 +2393,26 @@ def _turn_from_date(year, month, day, tod=0):
     days += (month - 1) * DAYS_PER_MONTH if month <= REGULAR_MONTHS else REGULAR_MONTHS * DAYS_PER_MONTH
     days += day - 1
     return max(0, days * TURNS_PER_DAY + tod)
+
+
+def _parse_date_to_turn(text):
+    """A date 'Y/M/D' or 'M/D' (current year) -> absolute world turn (day start). None if not a date."""
+    m = re.fullmatch(r"\s*(?:(\d+)/)?(\d+)/(\d+)\s*", str(text))
+    if not m:
+        return None
+    year = int(m.group(1)) if m.group(1) else _date_from_turn(TURN)[0]
+    return _turn_from_date(year, int(m.group(2)), int(m.group(3)))
+
+
+def _resolve_expire_on(value):
+    """A quest's expire_on -> an absolute world turn. Accepts an int turn, an int-string, or a date
+    'Y/M/D'/'M/D'. Returns None if it isn't resolvable."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    s = str(value).strip()
+    return int(s) if re.fullmatch(r"-?\d+", s) else _parse_date_to_turn(s)
 
 
 # Scheduled calendar notes (quests, reminders). Each: {year, month, day, end, turn, text}.
@@ -1807,6 +2477,59 @@ def _calendar_grid(turn, width=7):
     return "\n".join(lines)
 
 
+def _calendar_year(turn):
+    """STRUCTURED data for the calendar UI (a pure renderer): the WHOLE current year — all 14 months
+    (so the zoom-out shows everything and Lanus's leap length is visible) — with each day's manual
+    notes + computed effect/quest EXPIRIES placed at their exact turn-of-day (0-based; UI shows N+1),
+    plus where each player sits in the turn cycle (their stats.turn)."""
+    _ensure_cal_ids()
+    year, cur_month, today, tod, _ = _date_from_turn(turn)
+    months = {}
+    for m in range(1, REGULAR_MONTHS + 2):                   # 1..14 (14 = Lanus)
+        length = _month_length(year, m)
+        months[m] = {"month": m, "name": _month_name(m), "length": length,
+                     "days": {d: {"day": d, "notes": [], "effects": [], "quests": []} for d in range(1, length + 1)}}
+    for e in (ev for ev in CAL_EVENTS if ev["year"] == year):   # manual /calendar event notes, any month
+        m = e["month"]
+        if m in months:
+            for d in range(e["day"], (e["end"] or e["day"]) + 1):
+                if d in months[m]["days"]:
+                    months[m]["days"][d]["notes"].append({"id": e["id"], "text": e["text"], "turn": e["turn"]})
+    def _place(bucket, end_turn, text):
+        ey, em, ed, etod, _ = _date_from_turn(end_turn)
+        if ey == year and em in months and ed in months[em]["days"]:
+            months[em]["days"][ed][bucket].append({"text": text, "turn": etod})
+    for name, p in WORLD.items():
+        for eff in getattr(p, "effect", []):                 # effects: remaining = (started total or duration) - elapsed
+            total = eff._total if getattr(eff, "_total", None) is not None else getattr(eff, "duration", None)
+            if isinstance(total, (int, float)) and total:
+                _place("effects", turn + max(0, int(total - getattr(eff, "_elapsed", 0))), f"{eff.name} · {name}")
+        for q in getattr(p, "quest", []):                    # quests: turns-countdown OR an absolute end date
+            exp = getattr(q, "expiration", None)              # (proc-based expire_when has no date -> not placed)
+            if isinstance(exp, (int, float)) and not isinstance(exp, bool):
+                _place("quests", turn + max(0, int(exp)), f"{q.name} · {name}")
+            else:
+                target = _resolve_expire_on(getattr(q, "expire_on", None))
+                if target is not None:
+                    _place("quests", target, f"{q.name} · {name}")
+    players = []
+    for name, p in WORLD.items():
+        try:
+            t = int(p.stat.get("turn") or 0)
+        except (TypeError, ValueError):
+            t = 0
+        # turn N of the day -> slot N-1 (so turns 1..8 fill slots 0..7; turn 9 wraps to slot 0 of the
+        # NEXT day, not back to the same day). t==0 (hasn't acted yet) sits at the first slot.
+        players.append({"name": name, "symbol": _entity_symbol(p, name[:1]),
+                        "turn_of_day": (t - 1) % TURNS_PER_DAY if t > 0 else 0})
+    return {"year": year, "turns_per_day": TURNS_PER_DAY, "current_month": cur_month, "today": today,
+            "tod": tod, "leap": _is_leap(year),
+            "months": [{"month": months[m]["month"], "name": months[m]["name"], "length": months[m]["length"],
+                        "days": [months[m]["days"][d] for d in range(1, months[m]["length"] + 1)]}
+                       for m in range(1, REGULAR_MONTHS + 2)],
+            "players": players}
+
+
 # --- weather (lingering, from weather.csv) -----------------------------------
 # Weather has momentum: each day it tends to PERSIST (per the event's persistence), else it
 # transitions to a weighted-random event — so it lingers and shifts rather than being an
@@ -1835,6 +2558,7 @@ WEATHER_TABLE = _load_weather()
 WEATHER_TURN = -1           # the world TURN WEATHER_BY_UNIT reflects (-1 = uninitialized)
 WEATHER_BY_UNIT = {}        # weather-unit key -> weather for WEATHER_TURN (regional; see _cell_unit)
 WEATHER_QUEUE = {}          # (day, unit) -> forced weather (set via /event)
+_WEATHER_SYNCED_CELLS = -1  # cell-count WEATHER_BY_UNIT was last seeded for (skip the re-seed when unchanged)
 
 
 def _weather_entry(name):
@@ -1912,11 +2636,18 @@ def _sync_weather(turn):
     """Advance regional weather TURN-by-turn up to `turn` (linger + clump each step). Queued
     forces for (turn, unit) override; newly-added map units get seeded. Idempotent once caught up.
     (Per the user: weather rolls per world-turn, not per day — tune persistence/weights to linger.)"""
-    global WEATHER_TURN, WEATHER_BY_UNIT
+    global WEATHER_TURN, WEATHER_BY_UNIT, _WEATHER_SYNCED_CELLS
+    ncells = len(MAP["cells"])
+    # FAST PATH: already at this turn with no cells added/removed -> nothing to do. Without this the
+    # _all_units() re-seed below ran on EVERY _weather_at call, making get_state O(cells^2) (a 60x60
+    # map hung the server ~33s). Now _weather_at is O(1) once caught up.
+    if WEATHER_TURN == turn and ncells == _WEATHER_SYNCED_CELLS:
+        return
     if WEATHER_TURN < 0:
         WEATHER_BY_UNIT = {u: _roll_next_weather(None) for u in _all_units()}
         WEATHER_TURN = turn
         _apply_weather_queue(turn)
+        _WEATHER_SYNCED_CELLS = ncells
         return
     while WEATHER_TURN < turn:
         WEATHER_TURN += 1
@@ -1924,6 +2655,7 @@ def _sync_weather(turn):
         _apply_weather_queue(WEATHER_TURN)
     for unit in _all_units():  # seed units added to the map since the last sync
         WEATHER_BY_UNIT.setdefault(unit, _roll_next_weather(None))
+    _WEATHER_SYNCED_CELLS = ncells
 
 
 def _apply_weather_queue(turn):
@@ -1988,20 +2720,54 @@ def _cal_adjust(unit, value, mode):
     return TURN
 
 
+def _ensure_cal_ids():
+    """Give every calendar event a stable id (lazy migration — legacy/loaded events may lack one)."""
+    nxt = max((e.get("id", 0) for e in CAL_EVENTS), default=0) + 1
+    for e in CAL_EVENTS:
+        if not e.get("id"):
+            e["id"] = nxt
+            nxt += 1
+
+
 def _cal_event(args):
-    """/calendar event add <when> <text> | list | clear. `when` = 12 (day), 12.4 (day.turn),
-    or 12-15 (day range). Defaults to the current year/month."""
+    """/calendar event add <when> <text> | set <id> <text> | remove <id> | list | clear.
+    `when` = 12 (day), 12.4 (day.turn), or 12-15 (day range). Defaults to the current year/month."""
+    _ensure_cal_ids()
     if not args or args[0] in ("list", "show"):
         if not CAL_EVENTS:
             print("  (no calendar events)")
             return []
         for e in sorted(CAL_EVENTS, key=lambda x: (x["year"], x["month"], x["day"])):
             span = f"day {e['day']}" + (f"-{e['end']}" if e["end"] else "") + (f" turn {e['turn']}" if e["turn"] else "")
-            print(f"  Year {e['year']} {_month_name(e['month'])} {span}: {e['text']}")
+            print(f"  [{e['id']}] Year {e['year']} {_month_name(e['month'])} {span}: {e['text']}")
         return list(CAL_EVENTS)
     if args[0] == "clear":
         CAL_EVENTS.clear()
         print("  cleared all calendar events")
+        return True
+    if args[0] in ("remove", "delete", "rm"):
+        if len(args) < 2 or not args[1].isdigit():
+            print("  usage: /calendar event remove <id>   (see ids in /calendar event list)")
+            return False
+        eid = int(args[1])
+        match = next((e for e in CAL_EVENTS if e.get("id") == eid), None)
+        if match is None:
+            print(f"  no calendar event #{eid}")
+            return False
+        CAL_EVENTS.remove(match)
+        print(f"  removed calendar event #{eid}: {match['text']}")
+        return True
+    if args[0] in ("set", "edit"):
+        if len(args) < 3 or not args[1].isdigit():
+            print("  usage: /calendar event set <id> <text>")
+            return False
+        eid = int(args[1])
+        match = next((e for e in CAL_EVENTS if e.get("id") == eid), None)
+        if match is None:
+            print(f"  no calendar event #{eid}")
+            return False
+        match["text"] = " ".join(args[2:])
+        print(f"  calendar event #{eid} -> {match['text']}")
         return True
     if args[0] == "add":
         if len(args) < 3:
@@ -2013,7 +2779,12 @@ def _cal_event(args):
             return False
         when, text = args[1], " ".join(args[2:])
         year, month = _date_from_turn(TURN)[:2]
-        event = {"year": year, "month": month, "day": 1, "end": None, "turn": None, "text": text}
+        if "/" in when:                            # optional "month/day..." prefix targets a month of the current year
+            mstr, when = when.split("/", 1)
+            if mstr.lstrip("-").isdigit():
+                month = max(1, min(int(mstr), REGULAR_MONTHS + 1))
+        next_id = max((e.get("id", 0) for e in CAL_EVENTS), default=0) + 1
+        event = {"id": next_id, "year": year, "month": month, "day": 1, "end": None, "turn": None, "text": text}
         try:
             if "-" in when:
                 start, end = when.split("-", 1)
@@ -2029,7 +2800,7 @@ def _cal_event(args):
         CAL_EVENTS.append(event)
         print(f"  scheduled in {_month_name(month)} Year {year}: {text}")
         return True
-    print("  usage: /calendar event <add|list|clear> ...")
+    print("  usage: /calendar event <add|set|remove|list|clear> ...")
     return False
 
 
@@ -2182,19 +2953,21 @@ def _load_map(path=MAP_FILE):
 
 
 def _load_biomes(path="biomes.json"):
-    """biome -> list of ASCII-art lines, shown inside each map cell. User-extendable."""
+    """biome name -> metadata dict {label, color, glyph, weight, temperature, moisture, affinity}.
+    Drives the atlas (color/glyph), generation (weight + affinity continuity), and weather bias
+    (temperature/moisture). Top-level keys starting with '_' (e.g. notes) are skipped. User-extendable."""
     try:
         with open(path) as handle:
             data = json.load(handle)
-            return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_") and isinstance(v, dict)}
 
 
 MAP = _load_map()
-BIOME_ART = _load_biomes()
-CELL_W = 11   # inner cell width (matches biomes.json art width)
-CELL_H = 6    # content rows per cell: row 0 = biome label, rows 1.. = biome art (5 art rows)
+BIOMES = _load_biomes()
 
 
 def _save_map():
@@ -2501,24 +3274,305 @@ def _map_bounds():
     return (min(xs), max(xs), min(ys), max(ys)) if keys else (0, 0, 0, 0)
 
 
-RECOMMEND_FRESH = 0.2  # chance to roll a brand-new biome instead of echoing a neighbor (world diversity)
+# --- world generation: weighted-random biomes with strong neighbor COHESION (big organic clumps).
+# A candidate's odds = base `weight`, boosted per neighboring cell it relates to: same biome (scaled by
+# that biome's `cluster` strength — oceans/deserts sprawl, volcanoes stay tiny) >> on its affinity list
+# (mountains↔hills, river↔lake, …) > same climate. A smoothing pass then grows the clumps, and rivers
+# are carved as lines from high ground to water.
+GEN_SAME_BONUS, GEN_AFFINITY_BONUS, GEN_CLIMATE_BONUS = 9.0, 4.0, 1.8
+_EIGHT = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+WATER_BIOMES = ("ocean", "lake", "sea", "river", "jungle_river", "reef", "coast")
+HIGH_BIOMES = ("mountain", "alpine", "hills", "volcano", "glacier")
+
+
+def _cluster(biome):
+    """A biome's cohesion strength (how big its blobs grow). 1 if unset."""
+    return float((BIOMES.get(biome) or {}).get("cluster", 1) or 1)
+
+
+def _gen_neighbors(x, y):
+    """The biomes of (x,y)'s 8 surrounding cells that already exist on the map."""
+    out = []
+    for dx, dy in _EIGHT:
+        cell = MAP["cells"].get(f"{x + dx},{y + dy}")
+        if cell and cell.get("biome") in BIOMES:
+            out.append(cell["biome"])
+    return out
+
+
+def _gen_pick(x, y):
+    """Pick a biome for (x,y): weighted-random by base weight × cohesion bonuses from the 8 neighbors.
+    Same-biome bonus scales with that biome's `cluster` strength (oceans clump hard). Fresh each call."""
+    if not BIOMES:
+        return None
+    neighbors = _gen_neighbors(x, y)
+    pool = []
+    for name, entry in BIOMES.items():
+        weight = float(entry.get("weight", 1) or 1)
+        for nb in neighbors:
+            nbe = BIOMES.get(nb, {})
+            if name == nb:
+                weight *= GEN_SAME_BONUS * _cluster(name)
+            elif name in (nbe.get("affinity") or []) or nb in (entry.get("affinity") or []):
+                weight *= GEN_AFFINITY_BONUS
+            elif entry.get("temperature") == nbe.get("temperature") and entry.get("moisture") == nbe.get("moisture"):
+                weight *= GEN_CLIMATE_BONUS
+        pool.append((name, weight))
+    total = sum(w for _, w in pool)
+    if total <= 0:
+        return random.choice(list(BIOMES))
+    roll, acc = random.uniform(0, total), 0.0
+    for name, weight in pool:
+        acc += weight
+        if roll <= acc:
+            return name
+    return pool[-1][0]
+
+
+def _smooth_biomes(passes=2):
+    """De-speckle: flip ONLY near-isolated cells (at most 1 of their 8 neighbors share their biome) to
+    the dominant neighbor biome. Cleans lone 1-tile specks and ragged edges into smoother clumps WITHOUT
+    homogenizing — cells embedded in a region (2+ like neighbors) are never touched, so oceans, deserts,
+    mountains etc. all survive as big regions. Only run on a fresh generate."""
+    for _ in range(passes):
+        updates = {}
+        for key, cell in MAP["cells"].items():
+            x, y = (int(n) for n in key.split(","))
+            nbrs = _gen_neighbors(x, y)
+            if not nbrs:
+                continue
+            cur = cell.get("biome")
+            if sum(1 for b in nbrs if b == cur) > 1:    # well-embedded in its own region -> keep
+                continue
+            counts = {}
+            for b in nbrs:
+                counts[b] = counts.get(b, 0) + 1
+            best = max(counts, key=counts.get)
+            if best != cur and counts[best] >= 3:        # a clear local majority absorbs the speck
+                updates[key] = best
+        for key, biome in updates.items():
+            MAP["cells"][key]["biome"] = biome
+
+
+def _river_path(start_key, water_keys):
+    """A roughly straight (h/v segment) path from start toward the nearest water cell."""
+    sx, sy = (int(n) for n in start_key.split(","))
+    tx, ty = min((tuple(int(n) for n in w.split(",")) for w in water_keys),
+                 key=lambda p: abs(p[0] - sx) + abs(p[1] - sy))
+    path, x, y, guard = [], sx, sy, 0
+    while (x, y) != (tx, ty) and guard < 500:
+        guard += 1
+        if abs(tx - x) >= abs(ty - y) and x != tx:   # advance along the longer axis -> straight runs
+            x += 1 if tx > x else -1
+        elif y != ty:
+            y += 1 if ty > y else -1
+        else:
+            x += 1 if tx > x else -1
+        key = f"{x},{y}"
+        if key in MAP["cells"]:
+            path.append(key)
+    return path
+
+
+def _carve_rivers(n=None):
+    """Carve a few rivers as lines from high ground (mountains/hills) to the nearest water, so rivers
+    snake across the map and connect peaks to oceans/lakes. Won't overwrite water or peaks."""
+    cells = MAP["cells"]
+    water = [k for k, c in cells.items() if c.get("biome") in ("ocean", "lake", "sea")]
+    highs = [k for k, c in cells.items() if c.get("biome") in ("mountain", "alpine", "glacier", "volcano")]
+    if not water or not highs:
+        return 0
+    if n is None:
+        n = max(1, len(cells) // 60)
+    made = 0
+    keep = set(WATER_BIOMES) | set(HIGH_BIOMES)
+    for _ in range(n):
+        for key in _river_path(random.choice(highs), set(water)):
+            if cells[key].get("biome") not in keep:
+                cells[key]["biome"] = "river"
+                made += 1
+    return made
 
 
 def _map_recommend(x, y):
-    """Suggest a biome for a cell: WEIGHTED-RANDOM by its 4 orthogonal neighbors (so 2 forest +
-    2 jungle ≈ 50/50, biomes stay continuous), with a RECOMMEND_FRESH chance of a fresh biome.
-    On-the-spot random each call (not seeded), so re-rolling gives variety."""
-    neighbors = []
-    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        cell = MAP["cells"].get(f"{x + dx},{y + dy}")
-        if cell and cell.get("biome"):
-            neighbors.append(cell["biome"])
-    fresh_pool = [b for b in BIOME_ART if b != "default"]
-    if not neighbors:
-        return random.choice(fresh_pool) if fresh_pool else None
-    if fresh_pool and random.random() < RECOMMEND_FRESH:
-        return random.choice(fresh_pool)
-    return random.choice(neighbors)  # frequency-weighted: duplicates in the list raise that biome's odds
+    """Suggest a biome for a single cell (used by /map new|recommend) — same weighted+continuity pick
+    the generator uses, so a hand-added cell blends with its neighbors."""
+    return _gen_pick(x, y)
+
+
+def _weighted_biome():
+    """A biome chosen by base `weight` alone (used to seed regions)."""
+    pool = [(name, float(e.get("weight", 1) or 1)) for name, e in BIOMES.items()]
+    total = sum(w for _, w in pool) or 1
+    roll, acc = random.uniform(0, total), 0.0
+    for name, w in pool:
+        acc += w
+        if roll <= acc:
+            return name
+    return pool[-1][0] if pool else None
+
+
+def _gen_full(cols, rows):
+    """Generate a fresh cols×rows world by SEED-AND-GROW: scatter a handful of weighted-random biome
+    seeds, then flood outward — each empty cell adjacent to filled ones picks via _gen_pick (strong
+    cohesion). This yields several big, VARIED regions (oceans, deserts, forests…) instead of one biome
+    snowballing across the whole grid. Returns cells made."""
+    coords = [(x, y) for y in range(rows) for x in range(cols)]
+    seeds = max(3, len(coords) // 16)                      # ~1 region nucleus per 16 cells -> big clumps
+    for x, y in random.sample(coords, min(seeds, len(coords))):
+        MAP["cells"][f"{x},{y}"] = {"biome": _weighted_biome(), "name": ""}
+    empties = [c for c in coords if f"{c[0]},{c[1]}" not in MAP["cells"]]
+    guard = 0
+    while empties and guard < 100000:
+        guard += 1
+        random.shuffle(empties)                            # random fill order -> organic, non-directional edges
+        rest = []
+        for x, y in empties:
+            if _gen_neighbors(x, y):
+                MAP["cells"][f"{x},{y}"] = {"biome": _gen_pick(x, y), "name": ""}
+            else:
+                rest.append((x, y))
+        if len(rest) == len(empties):                      # an isolated pocket with no filled neighbor -> seed it
+            x, y = rest.pop()
+            MAP["cells"][f"{x},{y}"] = {"biome": _weighted_biome(), "name": ""}
+        empties = rest
+    return len(coords)
+
+
+def _gen_cells(coords):
+    """Generate + place a biome for each (x,y) in `coords`, IN ORDER, writing into MAP['cells'] as we
+    go so later cells see earlier ones as neighbors (continuity). Used for EXPAND (grow from the edge).
+    Skips coords that already exist. Returns how many were created."""
+    made = 0
+    for x, y in coords:
+        key = f"{x},{y}"
+        if key in MAP["cells"]:
+            continue
+        MAP["cells"][key] = {"biome": _gen_pick(x, y), "name": ""}
+        made += 1
+    return made
+
+
+_DIRS = {"north": "n", "up": "n", "n": "n", "south": "s", "down": "s", "s": "s",
+         "east": "e", "right": "e", "e": "e", "west": "w", "left": "w", "w": "w"}
+
+
+def _expand(direction, count):
+    """Append `count` rows/columns onto a side of the existing map, generating the new cells with
+    continuity seeded from the current edge. Returns cells made, or -1 for a bad direction."""
+    d = _DIRS.get(str(direction).lower())
+    if d is None:
+        return -1
+    if not MAP["cells"] or count < 1:
+        return 0
+    minx, maxx, miny, maxy = _map_bounds()
+    coords = []
+    if d == "e":      # new columns to the east; nearest-to-existing first so they seed off the edge
+        for x in range(maxx + 1, maxx + count + 1):
+            coords += [(x, y) for y in range(miny, maxy + 1)]
+    elif d == "w":
+        for x in range(minx - 1, minx - count - 1, -1):
+            coords += [(x, y) for y in range(miny, maxy + 1)]
+    elif d == "s":
+        for y in range(maxy + 1, maxy + count + 1):
+            coords += [(x, y) for x in range(minx, maxx + 1)]
+    else:             # north
+        for y in range(miny - 1, miny - count - 1, -1):
+            coords += [(x, y) for x in range(minx, maxx + 1)]
+    return _gen_cells(coords)
+
+
+AUTO_EXPAND_MARGIN, AUTO_EXPAND_RING = 1, 3  # grow when an entity comes within MARGIN of an edge
+
+
+def _auto_expand_near(x, y):
+    """If (x,y) sits within AUTO_EXPAND_MARGIN of the map's edge, grow that side by AUTO_EXPAND_RING
+    so players stay ahead of the boundary. Returns the directions grown (for reporting)."""
+    if not MAP["cells"]:
+        return []
+    minx, maxx, miny, maxy = _map_bounds()
+    grew = []
+    if x - minx <= AUTO_EXPAND_MARGIN and _expand("west", AUTO_EXPAND_RING) > 0:
+        grew.append("west")
+    if maxx - x <= AUTO_EXPAND_MARGIN and _expand("east", AUTO_EXPAND_RING) > 0:
+        grew.append("east")
+    if y - miny <= AUTO_EXPAND_MARGIN and _expand("north", AUTO_EXPAND_RING) > 0:
+        grew.append("north")
+    if maxy - y <= AUTO_EXPAND_MARGIN and _expand("south", AUTO_EXPAND_RING) > 0:
+        grew.append("south")
+    return grew
+
+
+# Fog of war is stored PER CELL and PER PLAYER, persistently, as two lists:
+#   cell['seen'] = players who've fully revealed it (BRIGHT)   cell['dim'] = players who've only glimpsed
+# it (DIMMED, stays dim forever). Moving reveals the cells within the mover's reveal_radius and dims the
+# cells within dim_radius (defaults: reveal 0 = just the tile you stand on, dim 1 = the surrounding ring;
+# both are stats so a scout can reveal/sense farther). The DM sees everything and hovers for who's been where.
+REVEAL_RADIUS_BASE, DIM_RADIUS_BASE = 0, 1
+
+
+def _cell_list(cell, key):
+    lst = cell.get(key)
+    if not isinstance(lst, list):
+        lst = []
+        cell[key] = lst
+    return lst
+
+
+def _vision_radii(entity):
+    """(reveal_radius, dim_radius) for an entity = the base defaults + their stats (dim >= reveal)."""
+    reveal = max(0, int(round(REVEAL_RADIUS_BASE + _effective_stat(entity, "reveal_radius"))))
+    dim = max(reveal, int(round(DIM_RADIUS_BASE + _effective_stat(entity, "dim_radius"))))
+    return reveal, dim
+
+
+def _reveal_cell(player_name, x, y):
+    """Fully reveal one cell for a player (scout / step). Promotes it out of 'dim'. True if it exists."""
+    cell = MAP["cells"].get(f"{x},{y}")
+    if cell is None:
+        return False
+    seen = _cell_list(cell, "seen")
+    if player_name not in seen:
+        seen.append(player_name)
+    dim = cell.get("dim")
+    if isinstance(dim, list) and player_name in dim:
+        dim.remove(player_name)
+    return True
+
+
+def _dim_cell(player_name, x, y):
+    """Mark one cell DIMMED for a player (glimpsed). Won't override a fully-revealed cell. True if exists."""
+    cell = MAP["cells"].get(f"{x},{y}")
+    if cell is None:
+        return False
+    if player_name not in _cell_list(cell, "seen"):
+        dim = _cell_list(cell, "dim")
+        if player_name not in dim:
+            dim.append(player_name)
+    return True
+
+
+def _unsee_cell(player_name, x, y):
+    """Undiscover a cell for a player (back to black): drop them from both seen and dim."""
+    cell = MAP["cells"].get(f"{x},{y}")
+    if cell is None:
+        return False
+    for key in ("seen", "dim"):
+        lst = cell.get(key)
+        if isinstance(lst, list) and player_name in lst:
+            lst.remove(player_name)
+    return True
+
+
+def _mark_vision(player_name, cx, cy, reveal_r, dim_r):
+    """Reveal cells within reveal_r of (cx,cy) and dim cells out to dim_r — persistently."""
+    for dx in range(-dim_r, dim_r + 1):
+        for dy in range(-dim_r, dim_r + 1):
+            cheb = max(abs(dx), abs(dy))
+            if cheb <= reveal_r:
+                _reveal_cell(player_name, cx + dx, cy + dy)
+            elif cheb <= dim_r:
+                _dim_cell(player_name, cx + dx, cy + dy)
 
 
 def _entity_pos(entity):
@@ -2568,140 +3622,76 @@ def _entity_symbol(entity, default):
     return str(symbol) if symbol else default
 
 
-def _cell_box(x, y, focus=None, occupants=None):
-    """The text lines (CELL_H + 2 tall) for one map cell as a box-drawn frame: coord in the top
-    border, biome label, then the biome's ASCII art. `focus` (x,y) marks ◆ (the viewed player);
-    cells with other entities get •. Empty coords render as a blank frame."""
-    coord = f"({x},{y})"
-    top = "╔" + coord + "═" * (CELL_W - len(coord)) + "╗"
-    bottom = "╚" + "═" * CELL_W + "╝"
-    cell = MAP["cells"].get(f"{x},{y}")
-    if not cell:
-        return [top] + ["║" + " " * CELL_W + "║"] * CELL_H + [bottom]
-    biome = cell.get("biome") or "?"
-    names_here = (occupants or {}).get((x, y))
-    if focus == (x, y):                                     # the focused player (their symbol, ◆ default)
-        marker = _entity_symbol(WORLD.get(names_here[0]) if names_here else None, "◆")
-    elif names_here:                                        # other entities here (their symbol, • default)
-        marker = _entity_symbol(WORLD.get(names_here[0]), "•")
-    elif cell.get("name"):
-        marker = "*"
-    else:
-        marker = " "
-    label = (marker + biome)[:CELL_W].ljust(CELL_W)
-    art = BIOME_ART.get(biome) or BIOME_ART.get("default") or []
-    lines = [top, "║" + label + "║"]
-    for r in range(CELL_H - 1):
-        art_line = (art[r] if r < len(art) else "")[:CELL_W].center(CELL_W)
-        lines.append("║" + art_line + "║")
-    return lines + [bottom]
+def _map_glyph(cell, focus_here=False, occupied=False):
+    """The single symbol for a cell in the text view: occupant marker, focus marker, else biome glyph."""
+    if occupied:
+        return "@"
+    if focus_here:
+        return "◆"
+    glyph = (BIOMES.get((cell or {}).get("biome"), {}) or {}).get("glyph")
+    return glyph or "·"
 
 
-def _map_render(anchor=None, rows_hint=None, focus=None, occupants=None):
-    """Build the viewport lines (list of strings). `anchor` (x,y) = the top-left cell shown
-    (how you pan); with no anchor it centers on `focus` (the viewed player) if given, else the map's
-    min corner. `occupants` {(x,y):[names]} marks who stands where. Viewport size follows the terminal."""
+def _map_table(focus=None, occupants=None):
+    """A compact TEXT view of the map (we're atlas-only — the rich layered map is the UI atlas):
+    a glyph grid (one biome glyph per cell) + a legend of the biomes present + a list of named cells,
+    where entities stand, and the weather under each. `focus` (x,y) marks ◆."""
     cells = MAP["cells"]
     if not cells:
-        return ["  (map is empty — /map new <x> <y> [biome])"]
+        return ["  (map is empty — generate one:  /map generate <N>x<K>   e.g.  /map generate 12x8)"]
+    occupants = occupants if occupants is not None else _map_occupants()
     minx, maxx, miny, maxy = _map_bounds()
-    cols, rows = shutil.get_terminal_size((80, 24))
-    per_row = max(1, cols // (CELL_W + 2))
-    per_col = max(1, ((rows_hint or rows) - 4) // (CELL_H + 2))
-    if anchor is None and focus is not None:           # center the viewport on the focused player
-        anchor = (focus[0] - per_row // 2, focus[1] - per_col // 2)
-    ax, ay = anchor if anchor else (minx, miny)
-    xs = list(range(ax, min(ax + per_row, maxx + 1)))
-    ys = list(range(ay, min(ay + per_col, maxy + 1)))
-    if not xs or not ys:
-        return [f"  (nothing at ({ax},{ay}); map spans x {minx}..{maxx}, y {miny}..{maxy})"]
-    head = [f"viewport ({xs[0]},{ys[0]})..({xs[-1]},{ys[-1]})"]
-    if focus is not None:
-        head.append(f"◆ ({focus[0]},{focus[1]})")
-    head.append(f"map x {minx}..{maxx} y {miny}..{maxy}")
-    out = ["  " + "  |  ".join(head)]
-    listing = []
-    for y in ys:
-        boxes = [_cell_box(x, y, focus, occupants) for x in xs]
-        for r in range(CELL_H + 2):
-            out.append("  " + "".join(box[r] for box in boxes))
-        for x in xs:
+    w, h = maxx - minx + 1, maxy - miny + 1
+    out = [f"  Map {w}×{h}   x {minx}..{maxx}  y {miny}..{maxy}   ({len(cells)} cells)"
+           + (f"   ◆ ({focus[0]},{focus[1]})" if focus else "")]
+    present = {}
+    for y in range(miny, maxy + 1):
+        row = []
+        for x in range(minx, maxx + 1):
             cell = cells.get(f"{x},{y}")
-            if cell and cell.get("name"):
-                listing.append(f"    ({x},{y}) {cell['name']} — {cell.get('biome', '?')}")
-            who = (occupants or {}).get((x, y))
-            if who:
-                tagged = ", ".join(f"{_entity_symbol(WORLD.get(n), '•')} {n}" for n in who)
-                listing.append(f"    ({x},{y}) {tagged}")
-    return out + listing
+            if cell:
+                present[cell.get("biome") or "?"] = True
+            glyph = _map_glyph(cell, focus == (x, y), (x, y) in occupants) if cell else "·"
+            row.append((glyph + " ")[:2] if len(glyph) == 1 else glyph)  # pad narrow glyphs so rows ~align
+        out.append("  " + "".join(row))
+    legend = "  ".join(f"{(BIOMES.get(b, {}) or {}).get('glyph', '?')} {b}" for b in sorted(present))
+    out.append("  legend: " + (legend or "—"))
+    for (x, y), who in sorted(occupants.items()):
+        weather, _ = _weather_at(x, y)
+        out.append(f"    ({x},{y}) {', '.join(who)}" + (f"  ·  {weather}" if weather else ""))
+    for key, cell in cells.items():
+        if cell.get("name"):
+            x, y = (int(n) for n in key.split(","))
+            out.append(f"    ({x},{y}) ★ {cell['name']} — {cell.get('biome', '?')}")
+    return out
 
 
-def _map_view(anchor=None, focus=None, occupants=None):
-    print("\n".join(_map_render(anchor, focus=focus, occupants=occupants)))
+def _map_view(focus=None, occupants=None):
+    print("\n".join(_map_table(focus=focus, occupants=occupants)))
 
 
 def _map_interactive(anchor=None, focus=None, occupants=None):
-    """Live viewer: arrow keys pan cell-by-cell, q or :done exits. Needs a real terminal —
-    falls back to a one-shot static render when stdin isn't a TTY (piped/scripted)."""
-    if not sys.stdin.isatty():
-        _map_view(anchor, focus, occupants)
-        return True
-    import termios
-    import tty
-    import select
-    minx, maxx, miny, maxy = _map_bounds()
-    if anchor is None and focus is not None:
-        cols, rows = shutil.get_terminal_size((80, 24))
-        anchor = (focus[0] - max(1, cols // (CELL_W + 2)) // 2, focus[1] - max(1, (rows - 4) // (CELL_H + 2)) // 2)
-    ax, ay = anchor if anchor else (minx, miny)
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setraw(fd)
-        while True:
-            ax = max(minx, min(ax, maxx))
-            ay = max(miny, min(ay, maxy))
-            frame = _map_render((ax, ay), focus=focus, occupants=occupants) + ["", "  arrows pan · q / Enter / :done to exit"]
-            sys.stdout.write("\033[2J\033[H" + "\r\n".join(frame) + "\r\n")
-            sys.stdout.flush()
-            ch = sys.stdin.read(1)
-            if ch in ("q", "\x03", "\x04", "\r", "\n"):  # q / Ctrl-C / Ctrl-D / Enter
-                break
-            if ch == ":":  # read the rest of a :word (cooked-ish) and exit on :done/:q
-                word = ""
-                while True:
-                    c = sys.stdin.read(1)
-                    if c in ("\r", "\n"):
-                        break
-                    word += c
-                if word.strip() in ("done", "q", "quit", "exit"):
-                    break
-            elif ch == "\x1b":  # escape — an arrow seq (ESC [ A/B/C/D) or a bare ESC
-                if select.select([fd], [], [], 0.05)[0]:
-                    seq = sys.stdin.read(2)
-                    ay -= seq == "[A"
-                    ay += seq == "[B"
-                    ax += seq == "[C"
-                    ax -= seq == "[D"
-                else:
-                    break  # bare ESC = exit
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        sys.stdout.write("\033[2J\033[H")
-        sys.stdout.flush()
-    _map_view((ax, ay), focus, occupants)  # leave the final frame in the scrollback
+    """Atlas-only: the live arrow-key ASCII pan is retired — print the compact text view instead.
+    (The full layered, filterable map is the UI atlas; `anchor` is accepted+ignored for callers.)"""
+    _map_view(focus=focus, occupants=occupants)
     return True
 
 
 def cmd_map(rest):
-    """/map [view [<player>] [x y]]   show the biome grid; a <player> focuses ◆ on them (centers
-                                       the view); every positioned entity shows as •. x y pans.
+    """/map generate <N>x<K>      generate a fresh N×K world (weighted biomes + neighbor continuity);
+                                   add  replace  to wipe an existing map first
+       /map expand <dir> <count>   grow the map: append <count> rows/cols on north|south|east|west,
+                                   biomes seeded from the edge (also auto-grows as players near an edge)
+       /map look|dim|hide <player> <x> <y> […]    adjust a player's fog without moving: reveal (bright) /
+                                   dim (glimpsed) / hide (back to black) the given tile(s)
+       /map [view [<player>]]      compact text view (glyph grid + legend); <player> marks ◆ on them
        /map pos <player> <x> <y>    set a PLAYER's position (nbt pos:{x,y}) — players aren't a party
        /map pos <x> <y>             set the legacy global marker (MAP['pos'])
        /map get <x> <y>            a cell's full info
        /map set <x> <y> <biome>|{nbt}   create/update a cell
        /map new <x> <y> [biome]    create a cell (biome auto-recommended from neighbors if omitted)
-       /map recommend <x> <y>      suggest a biome from neighboring cells"""
+       /map recommend <x> <y>      suggest a biome from neighboring cells
+    (Atlas-only: the rich layered/filterable map is the UI atlas; the console view is text.)"""
     parts = rest.split()
     sub = parts[0] if parts else "view"
     if sub in ("view", "show"):
@@ -2718,7 +3708,62 @@ def cmd_map(rest):
             focus = _entity_pos(entity)
             if focus is None:
                 print(f"  {names[0]} has no position — set it with /map pos {names[0]} <x> <y>")
-        _map_interactive(anchor, focus, occupants)  # arrow-key pan in a real terminal; static when piped
+        _map_view(focus=focus, occupants=occupants)
+        return True
+    if sub == "generate":
+        dims = re.findall(r"\d+", " ".join(parts[1:]))
+        if len(dims) < 2:
+            print("  usage: /map generate <N>x<K>   (columns × rows, e.g. /map generate 12x8)")
+            return False
+        n, k = int(dims[0]), int(dims[1])
+        if n < 1 or k < 1:
+            print("  size must be at least 1×1")
+            return False
+        if MAP["cells"] and "replace" not in parts:
+            print(f"  the map already has {len(MAP['cells'])} cells — add  replace  to wipe + regenerate, "
+                  "or grow it with  /map expand <dir> <count>")
+            return False
+        if "replace" in parts:
+            MAP["cells"].clear()
+            STRUCTURES.clear()
+        made = _gen_full(n, k)                  # seed-and-grow: several big, varied regions
+        _smooth_biomes(2)                       # de-speckle ragged edges / lone tiles
+        rivers = _carve_rivers()                # snake a few rivers from peaks to water
+        MAP["pos"] = [n // 2, k // 2]
+        _save_map()
+        print(f"  generated a {n}×{k} world ({made} cells" + (f", {rivers} river tiles" if rivers else "")
+              + ") — open the atlas to view it")
+        return True
+    if sub == "expand":
+        if not MAP["cells"]:
+            print("  nothing to expand — generate first:  /map generate <N>x<K>")
+            return False
+        direction = parts[1] if len(parts) > 1 else ""
+        count = next((int(t) for t in parts[2:] if t.isdigit()), 1)
+        made = _expand(direction, count)
+        if made < 0:
+            print("  usage: /map expand <north|south|east|west> <count>")
+            return False
+        minx, maxx, miny, maxy = _map_bounds()
+        _save_map()
+        print(f"  expanded {direction} by {count} ({made} new cells) — map now x {minx}..{maxx} y {miny}..{maxy}")
+        return True
+    if sub in ("look", "scout", "reveal", "dim", "hide", "unsee"):   # adjust a player's fog without moving
+        verb = {"look": _reveal_cell, "scout": _reveal_cell, "reveal": _reveal_cell,
+                "dim": _dim_cell, "hide": _unsee_cell, "unsee": _unsee_cell}[sub]
+        named = [t for t in parts[1:] if not t.lstrip("-").isdigit()]
+        nums = [int(t) for t in parts[1:] if t.lstrip("-").isdigit()]
+        if not named or len(nums) < 2:
+            print(f"  usage: /map {sub} <player> <x> <y> [<x2> <y2> ...]   (reveal | dim | hide tile(s) for a player)")
+            return False
+        if named[0] not in WORLD:
+            print(f"  no character '{named[0]}'")
+            return False
+        pairs = [(nums[i], nums[i + 1]) for i in range(0, len(nums) - 1, 2)]
+        done = sum(1 for x, y in pairs if verb(named[0], x, y))
+        _save_map()
+        word = {"look": "reveals", "scout": "reveals", "reveal": "reveals", "dim": "dims", "hide": "hides", "unsee": "hides"}[sub]
+        print(f"  {named[0]} {word} {done} tile{'s' if done != 1 else ''}: {', '.join(f'({x},{y})' for x, y in pairs)}")
         return True
     if sub == "pos":
         named = [t for t in parts[1:] if not t.lstrip("-").isdigit()]
@@ -2729,6 +3774,9 @@ def cmd_map(rest):
                 print(f"  no character '{named[0]}'")
                 return False
             entity.nbt["pos"] = {"x": nums[0], "y": nums[1]}
+            if not _is_mob(entity):       # teleporting a player reveals/dims their vision around the landing cell
+                _mark_vision(named[0], nums[0], nums[1], *_vision_radii(entity))
+            _save_map()
             print(f"  {named[0]} is now at ({nums[0]},{nums[1]})")
             return True
         if len(nums) >= 2:  # legacy global marker
@@ -2774,7 +3822,8 @@ def cmd_map(rest):
             _save_map()
             print(f"  added ({x},{y}) biome '{biome}'" + ("  (recommended from neighbors)" if len(parts) <= 3 else ""))
             return True
-    print("  usage: /map [view [x y]] | pos <x> <y> | get <x> <y> | set <x> <y> <biome>|{nbt} | new <x> <y> [biome] | recommend <x> <y>")
+    print("  usage: /map generate <N>x<K> | expand <dir> <count> | view [player] | pos <x> <y> | "
+          "get <x> <y> | set <x> <y> <biome>|{nbt} | new <x> <y> [biome] | recommend <x> <y>")
     return False
 
 
@@ -2793,6 +3842,29 @@ def _load_bestiary(path="bestiary.json"):
 
 
 BESTIARY = _load_bestiary()
+
+
+def _load_body_coverage(path="body_coverage.csv"):
+    """Equip-slot -> % of the body it protects (the shared default; players can override per-slot).
+    Slot names are normalized lowercase + de-pluralized so 'Pauldrons'/'Greaves' match the slot keys
+    'pauldron'/'greave'. Uses the armor coverage %, falling back to the under-armor % (clothing)."""
+    coverage = {}
+    try:
+        with open(path) as handle:
+            for row in csv.DictReader(handle):
+                name = (row.get("Article") or "").strip().lower().rstrip("s")
+                value = (row.get("Armor Coverage (%)") or "").strip() or (row.get("Under-Armor Coverage (%)") or "").strip()
+                if name and value:
+                    try:
+                        coverage[name] = float(value)
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return coverage
+
+
+BODY_COVERAGE = _load_body_coverage()
 
 
 def _apply_template(mob, species):
@@ -2903,6 +3975,8 @@ def _collection_command(rest, container_attr, element_cls, cmd_name):
             element = element_cls.from_nbt(ident, nbt)
             getattr(player, container_attr).add(element)
             print(f"  {name}: added {cmd_name} {element}")
+            if cmd_name in ("effect", "talent", "ability"):
+                _fire_element_hook(player, element, "on_apply")   # passive grant when gained
             _flag_path_issues(player, element)
         return True
     if sub in ("modify", "remove"):
@@ -2920,6 +3994,8 @@ def _collection_command(rest, container_attr, element_cls, cmd_name):
                 print(f"  {name} has no {cmd_name} '{ident}'")
                 continue
             if sub == "remove":
+                if cmd_name in ("effect", "talent", "ability"):
+                    _fire_element_hook(player, element, "on_clear")   # reverse the grant on removal
                 container.remove(element)
                 print(f"  {name}: removed {cmd_name} '{ident}'")
                 ok = True
@@ -2980,6 +4056,21 @@ def cmd_quest(rest):
             _flag_path_issues(player, quest)  # flag missing reward functions
             _report_fired(name, _pulse_procs(player, ["quest_obtained"]))
         return True
+    if sub == "objective":   # manage a quest's progress-elements (add/list/clear/<idx> set|goal|label|proc|remove)
+        m = re.match(r"^(\S+)\s*(.*)$", remainder, re.DOTALL)
+        if not m:
+            print("  usage: /quest objective <selector> <quest> <list|add|clear|<idx> ...>")
+            return False
+        ident, ops = m.group(1), m.group(2).strip()
+        ok = False
+        for name, player in targets:
+            quest = player.quest.get(ident)
+            if quest is None:
+                print(f"  {name} has no quest '{ident}'")
+                continue
+            if _quest_objective_op(name, player, quest, ops):
+                ok = True
+        return ok
     # complete / modify / delete address an EXISTING quest by name
     head = re.match(r"^([^\s{]+)\s*(.*)$", remainder, re.DOTALL)
     if not head or not head.group(1):
@@ -2993,11 +4084,7 @@ def cmd_quest(rest):
             print(f"  {name} has no quest '{ident}'")
             continue
         if sub == "complete":
-            applied = _apply_reaction(player, quest.reward, origin=player) if isinstance(quest.reward, Reaction) else []
-            player.quest.remove(quest)
-            detail = f" (reward: {', '.join(applied)})" if applied else ""
-            print(f"  {name}: completed quest '{ident}'{detail}")
-            _report_fired(name, _pulse_procs(player, ["quest_complete"]))
+            _complete_quest(name, player, quest)
             ok = True
         elif sub == "delete":
             failed = ops.strip().lower() in ("true", "1", "yes")
@@ -3015,31 +4102,208 @@ def cmd_quest(rest):
             _flag_path_issues(player, quest)
             ok = True
         else:
-            print("  usage: /quest <new|complete|modify|delete|list> <selector> <quest> ...")
+            print("  usage: /quest <new|complete|modify|delete|list|objective> <selector> <quest> ...")
             return False
     return ok
 
 
+def _obj_done(o):
+    """An objective is complete when current meets its target (percent>=100, segment>=goal, binary>=1)."""
+    cur = o.get("current", 0) or 0
+    t = o.get("type")
+    if t == "percent":
+        return cur >= 100
+    if t == "segment":
+        return cur >= (o.get("goal", 1) or 1)
+    return cur >= 1
+
+
+def _obj_progress_text(o):
+    t = o.get("type")
+    if t == "percent":
+        return f"{o.get('current', 0)}%"
+    if t == "segment":
+        return f"{o.get('current', 0)}/{o.get('goal', 1)}"
+    return "done" if (o.get("current", 0) or 0) else "incomplete"
+
+
+def _complete_quest(owner_name, player, quest):
+    """Fire the quest's on:complete hooks (the reward — @s = owner), drop the quest, and pulse
+    'quest_complete'. Shared by /quest complete and the all-objectives-done auto-complete."""
+    rewarded = _emit(player, "complete", origin=player, subject=quest)   # quest reward is now an on:complete hook
+    player.quest.remove(quest)
+    print(f"  {owner_name}: completed quest '{quest.name}'")
+    _report_fired(owner_name, rewarded)
+    _report_fired(owner_name, _pulse_procs(player, ["quest_complete"]))
+
+
+def _find_objective(quest, key):
+    """Locate an objective by 0-based index OR by id. Returns (index, obj) or (None, None)."""
+    objs = quest.objectives
+    if re.fullmatch(r"\d+", str(key)):
+        i = int(key)
+        if 0 <= i < len(objs):
+            return i, objs[i]
+    for i, o in enumerate(objs):
+        if o.get("id") == key:
+            return i, o
+    return None, None
+
+
+def _next_obj_id(quest):
+    n, used = 1, {o.get("id") for o in quest.objectives}
+    while f"ob{n}" in used:
+        n += 1
+    return f"ob{n}"
+
+
+def _set_objective(owner_name, player, quest, obj, value):
+    """Set one objective's progress (clamped to its type). Pulses the objective's own procs on the
+    rising edge (incomplete -> complete), then AUTO-COMPLETES the quest if every objective is done.
+    Returns True if the quest auto-completed (so the caller stops touching it)."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        print("  progress must be a number")
+        return False
+    t = obj.get("type")
+    if t == "percent":
+        v = max(0, min(100, v))
+    elif t == "segment":
+        v = max(0, min(obj.get("goal", 1) or 1, int(round(v))))
+    else:  # binary
+        v = 1 if v else 0
+    obj["current"] = int(v) if v == int(v) else v
+    was_done, now_done = bool(obj.get("done")), _obj_done(obj)
+    obj["done"] = now_done
+    label = obj.get("label") or obj.get("id")
+    print(f"  {owner_name}: '{quest.name}' · {label} -> {_obj_progress_text(obj)}" + ("  ✓" if now_done else ""))
+    if now_done and not was_done and obj.get("proc"):
+        _report_fired(owner_name, _pulse_procs(player, list(obj["proc"])))
+    if quest.objectives and all(_obj_done(o) for o in quest.objectives):
+        print(f"    all objectives complete -> auto-completing '{quest.name}'")
+        _complete_quest(owner_name, player, quest)
+        return True
+    return False
+
+
+def _quest_objective_op(owner_name, player, quest, ops):
+    """One /quest objective operation on a single owner's quest. Verbs: (none)/list, add <type> <label>,
+    clear, and <idx|id> <set|goal|label|proc|remove> ... Returns True on success."""
+    parts = ops.split()
+    if not parts or parts[0] == "list":
+        if not quest.objectives:
+            print(f"  '{quest.name}': no objectives")
+            return True
+        for i, o in enumerate(quest.objectives):
+            proc = ("  proc:" + ",".join(o["proc"])) if o.get("proc") else ""
+            print(f"    [{i}] {o['id']} {o['type']} \"{o['label']}\"  {_obj_progress_text(o)}{proc}")
+        return True
+    verb = parts[0]
+    if verb == "add":
+        t = parts[1].lower() if len(parts) > 1 else ""
+        if t not in OBJECTIVE_TYPES:
+            print("  usage: /quest objective <sel> <quest> add binary|segment|percent <label>")
+            return False
+        label = ops.split(None, 2)[2] if len(parts) > 2 else ""
+        obj = {"id": _next_obj_id(quest), "type": t, "label": label,
+               "goal": 100 if t == "percent" else (1 if t == "binary" else 3),
+               "current": 0, "proc": [], "done": False}
+        quest.objectives.append(obj)
+        print(f"  {owner_name}: '{quest.name}' + {t} objective [{len(quest.objectives) - 1}] {obj['id']} \"{label}\"")
+        return True
+    if verb == "clear":
+        quest.objectives.clear()
+        print(f"  {owner_name}: '{quest.name}' objectives cleared")
+        return True
+    idx, obj = _find_objective(quest, verb)
+    if obj is None:
+        print(f"  '{quest.name}' has no objective '{verb}' (use an index 0.. or its id)")
+        return False
+    action = parts[1] if len(parts) > 1 else ""
+    rest_text = ops.split(None, 2)[2].strip() if len(parts) > 2 else ""
+    if action == "remove":
+        quest.objectives.pop(idx)
+        print(f"  {owner_name}: '{quest.name}' removed objective [{idx}]")
+        return True
+    if action == "label":
+        obj["label"] = rest_text
+        print(f"  {owner_name}: '{quest.name}' [{idx}] label = \"{rest_text}\"")
+        return True
+    if action == "goal":
+        try:
+            obj["goal"] = max(1, int(rest_text))
+        except ValueError:
+            print("  goal must be a whole number")
+            return False
+        if (obj.get("current") or 0) > obj["goal"]:
+            obj["current"] = obj["goal"]
+        obj["done"] = _obj_done(obj)
+        print(f"  {owner_name}: '{quest.name}' [{idx}] goal = {obj['goal']}")
+        return True
+    if action == "proc":
+        if not rest_text or rest_text.lower() == "reset":
+            obj["proc"] = []
+            print(f"  {owner_name}: '{quest.name}' [{idx}] proc cleared")
+            return True
+        obj["proc"] = [s.strip() for s in re.split(r"[,\s]+", rest_text.strip("[]{}")) if s.strip()]
+        print(f"  {owner_name}: '{quest.name}' [{idx}] proc = {','.join(obj['proc'])}")
+        return True
+    if action == "set":
+        if not rest_text:
+            print("  usage: /quest objective <sel> <quest> <idx> set <n>")
+            return False
+        _set_objective(owner_name, player, quest, obj, rest_text.split()[0])
+        return True
+    print(f"  unknown objective action '{action}' (set|goal|label|proc|remove)")
+    return False
+
+
 def _quest_label(quest):
-    """'slay_dragon (3t)' — append the remaining expiry when set."""
+    """'slay_dragon (3t)' / '(until turn 92)' / '(until {hex_lifted:true})' — show the remaining expiry."""
     exp = quest.expiration
-    return f"{quest.name} ({exp}t)" if isinstance(exp, int) and not isinstance(exp, bool) else quest.name
+    if isinstance(exp, int) and not isinstance(exp, bool):
+        return f"{quest.name} ({exp}t)"
+    target = _resolve_expire_on(getattr(quest, "expire_on", None))
+    if target is not None:
+        return f"{quest.name} (until turn {target})"
+    cw = getattr(quest, "expire_when", None)
+    if isinstance(cw, Proc) and cw.clauses:
+        return f"{quest.name} (until {cw})"
+    return quest.name
+
+
+def _fail_quest(player, quest, reason):
+    """Drop a quest as failed: remove it + pulse 'quest_failed' on the owner."""
+    player.quest.remove(quest)
+    print(f"    {player.name}: quest '{quest.name}' {reason} -> quest_failed")
+    _report_fired(player.name, _pulse_procs(player, ["quest_failed"]))
 
 
 def _tick_quests(player):
-    """One of the owner's turns passes: count each quest's expiration down; at 0 it auto-fails
-    (removed + pulse 'quest_failed'). Quests with no expiration (None) are untouched."""
+    """One of the owner's turns passes: count down a turns-based expiration (auto-fail at 0), and
+    fail any quest whose expire_on date has been reached. Proc-based expire_when is handled the moment
+    the proc fires (see _check_quest_clears). Quests with no expiry are untouched."""
     for quest in list(player.quest):
         exp = quest.expiration
-        if not isinstance(exp, int) or isinstance(exp, bool):
-            continue
-        exp -= 1
-        if exp <= 0:
-            player.quest.remove(quest)
-            print(f"    {player.name}: quest '{quest.name}' expired -> quest_failed")
-            _report_fired(player.name, _pulse_procs(player, ["quest_failed"]))
-        else:
+        if isinstance(exp, int) and not isinstance(exp, bool):
+            exp -= 1
+            if exp <= 0:
+                _fail_quest(player, quest, "expired")
+                continue
             quest.expiration = exp
+        target = _resolve_expire_on(getattr(quest, "expire_on", None))
+        if target is not None and TURN >= target:
+            _fail_quest(player, quest, "reached its end date")
+
+
+def _check_quest_clears(player):
+    """Fail any quest whose expire_when Proc matches the player's current proc-state (the quest analog
+    of an effect's clear_when). Called wherever proc-state changes, so a pulse ends it at once."""
+    for quest in list(player.quest):
+        cw = getattr(quest, "expire_when", None)
+        if isinstance(cw, Proc) and cw.clauses and cw.matches(player.proc_state):
+            _fail_quest(player, quest, "condition met")
 
 
 def cmd_talent(rest):
@@ -3220,17 +4484,27 @@ def _apply_reaction(player, reaction, origin=_INHERIT):
 
 
 def _fire_talents(player):
-    """Fire every talent whose proc conditions match the player's current proc-state.
-    Returns a list of (talent_name, applied_changes). Sets SELF=player for the duration so
-    @s (self) resolves to the proc owner inside reactions/functions."""
+    """Fire every flag-condition HOOK the player wears whose clause now matches their proc-state, then
+    check effect/quest clears. (Formerly also iterated talent.proc/reaction — that's been migrated onto
+    the hook bus.) Sets @s = player so reactions/functions resolve against the owner. Keeps its name:
+    it's still the proc-pulse fan-out, just hook-driven now."""
     global SELF, ORIGIN
     prev_self, SELF = SELF, player
-    prev_origin, ORIGIN = ORIGIN, player  # a self-procced talent's cause is its owner (@o = @s here)
+    prev_origin, ORIGIN = ORIGIN, player  # a self-procced reaction's cause is its owner (@o = @s here)
     try:
         fired = []
-        for talent in player.talent:
-            if isinstance(talent.proc, Proc) and talent.proc.matches(player.proc_state):
-                fired.append((talent.name, _apply_reaction(player, talent.reaction, origin=player)))
+        # worn hooks whose `on` is a flag-condition (on:'' or 'proc') and whose flag clause now holds.
+        # Flags stay the trigger — the hook just carries the reaction (was: talent.proc -> talent.reaction).
+        for name, kind in _owner_hook_pairs(player):
+            hook = WORLD_HOOKS.get(name)
+            if hook is None or hook.on not in ("", "proc"):
+                continue
+            if not (isinstance(hook.condition, Proc) and hook.condition.clauses):
+                continue   # a condition-less proc hook would fire on every pulse — require a flag clause
+            if hook.condition.matches(player.proc_state):
+                fired.append((name, _apply_reaction(player, hook.run, origin=player) if isinstance(hook.run, Reaction) else []))
+        _check_effect_clears(player)   # a proc that just fired may also END an effect (clear_when)
+        _check_quest_clears(player)    # ...or fail a quest whose expire_when proc now holds
         return fired
     finally:
         SELF, ORIGIN = prev_self, prev_origin
@@ -3283,6 +4557,224 @@ def _report_fired(name, fired):
     for talent_name, changes in fired:
         detail = f" ({', '.join(changes)})" if changes else ""
         print(f"    -> {talent_name} procced{detail}")
+
+
+# --- the unified HOOK event bus ----------------------------------------------
+# A hook lives in WORLD_HOOKS (the session library). An element "wears" a hook by listing its name in
+# that element's nbt `hooks:[...]`. _emit(owner, event) finds every hook worn by the owner's elements
+# (context-gated to that element's kind) whose `on` matches the event and whose condition holds, and
+# runs its reaction. This is the single path that will replace proc/reaction/on_*/reward/clear_when.
+def _owner_hook_pairs(owner):
+    """(hook_name, element_kind) for every hook the owner currently wears. Sources: the owner's own
+    nbt.hooks (kind '') + each talent/ability/effect/quest (its kind) + each inventory/equipped item."""
+    pairs = []
+    def add(container, kind):
+        names = container.get("hooks") if isinstance(container, dict) else getattr(container, "nbt", {}).get("hooks")
+        for n in _proc_tokens(names):
+            pairs.append((n, kind))
+    add(owner.nbt, "")
+    for t in getattr(owner, "talent", []):
+        add(t, "talent")
+    for a in getattr(owner, "ability", []):
+        add(a, "ability")
+    for e in getattr(owner, "effect", []):
+        add(e, "effect")
+    for q in getattr(owner, "quest", []):
+        add(q, "quest")
+    for it in list(getattr(owner, "inventory", [])) + [i for items in getattr(owner, "equipment", _NoEquip()).equipped().values() for i in items]:
+        add(it, "item")
+    return pairs
+
+
+class _NoEquip:
+    def equipped(self):
+        return {}
+
+
+def _element_kind(el):
+    """The hook-context category of an element (item/ability/talent/effect/quest), '' if unknown."""
+    for cls, kind in ((Item, "item"), (Ability, "ability"), (Talent, "talent"), (Effect, "effect"), (Quest, "quest")):
+        if isinstance(el, cls):
+            return kind
+    return ""
+
+
+def _subject_hook_pairs(el):
+    return [(n, _element_kind(el)) for n in _proc_tokens(getattr(el, "nbt", {}).get("hooks"))]
+
+
+def _emit(owner, event, origin=None, subject=None):
+    """Fire hooks listening for `event` (context-gated, condition-checked). `subject` scopes to ONE
+    element's hooks (so equipping item A fires only A's hooks); omit it for owner-wide events.
+    Returns a list of (hook_name, applied_changes). @s = owner, @o = origin during each reaction."""
+    global SELF, ORIGIN
+    fired, seen = [], set()
+    prev_self, prev_origin = SELF, ORIGIN
+    SELF, ORIGIN = owner, origin if origin is not None else owner
+    try:
+        for name, kind in (_subject_hook_pairs(subject) if subject is not None else _owner_hook_pairs(owner)):
+            hook = WORLD_HOOKS.get(name)
+            if hook is None or hook.on != event:
+                continue
+            if hook.context and kind and hook.context != kind:
+                continue  # a hook scoped to one element kind shouldn't fire from another
+            if isinstance(hook.condition, Proc) and hook.condition.clauses and not hook.condition.matches(owner.proc_state):
+                continue
+            key = (name, kind)
+            if key in seen:
+                continue
+            seen.add(key)
+            applied = _apply_reaction(owner, hook.run, origin=ORIGIN) if isinstance(hook.run, Reaction) else []
+            rc = hook.nbt.get("run_command")   # a Lab-built command (e.g. an /execute … run function …)
+            if rc:
+                rc = str(rc)
+                dispatch(rc if rc.startswith("/") else "/" + rc)   # @s=owner bound; chain re-evaluates at fire time
+                applied = applied + [f"ran: {rc}"]
+            fired.append((name, applied))
+    finally:
+        SELF, ORIGIN = prev_self, prev_origin
+    return fired
+
+
+def _legacy_field(el, key):
+    """Read a legacy field from its (possibly removed) structured attr, else from nbt where the parser
+    leaves it as a string/list. Returns the raw value (str/list/Proc/Reaction) or None."""
+    v = getattr(el, key, None)
+    return el.nbt.get(key) if v is None else v
+
+
+def _clear_legacy(el, key):
+    if getattr(el, key, None) is not None:
+        try:
+            setattr(el, key, None)
+        except (AttributeError, TypeError):
+            pass
+    el.nbt.pop(key, None)
+
+
+def _hookify_player(player):
+    """One-time migration: fold this player's legacy reaction-bearing fields into WORLD_HOOKS + each
+    element's nbt.hooks, then clear them. Covers talent proc+reaction, any element's on_apply/on_clear,
+    item on_equip/on_unequip/on_use, and quest reward. Idempotent (no-ops once the fields are empty)."""
+    migrated = 0
+    def attach(el, hn):
+        worn = list(_proc_tokens(el.nbt.get("hooks")))
+        if hn not in worn:
+            worn.append(hn)
+        el.nbt["hooks"] = worn
+    def reaction(el, key):
+        v = _legacy_field(el, key)
+        if v in (None, "", "None"):
+            return None
+        r = Reaction.parse(v)
+        return r if r.actions else None
+    def make(el, ident, kind, suffix, on, condition=None, run=None):
+        nonlocal migrated
+        hn = f"{ident}__{suffix}"
+        WORLD_HOOKS.setdefault(hn, Hook(name=hn, on=on, context=kind, condition=condition, run=run))
+        attach(el, hn); migrated += 1
+        return hn
+    for t in player.talent:   # talent proc-condition + reaction -> on:proc
+        pv = _legacy_field(t, "proc")
+        proc = Proc.parse(pv) if pv not in (None, "", "None") else None
+        run = reaction(t, "reaction")
+        if proc and proc.clauses and run:
+            make(t, t.name, "talent", "on", "proc", condition=repr(proc), run=repr(run))
+            _clear_legacy(t, "proc"); _clear_legacy(t, "reaction")
+    for kind, setobj in (("talent", player.talent), ("effect", player.effect), ("ability", player.ability)):
+        for el in setobj:
+            for field, event in (("on_apply", "gain"), ("on_clear", "lose")):
+                r = reaction(el, field)
+                if r:
+                    make(el, el.name, kind, event, event, run=repr(r)); _clear_legacy(el, field)
+    for it in list(player.inventory) + [i for v in player.equipment.equipped().values() for i in v]:
+        for field, event in (("on_equip", "equip"), ("on_unequip", "unequip"), ("on_use", "use")):
+            r = reaction(it, field)
+            if r:
+                make(it, it.type_id, "item", event, event, run=repr(r)); it.nbt.pop(field, None)
+    for q in player.quest:   # quest reward -> on:complete
+        r = reaction(q, "reward")
+        if r:
+            make(q, q.name, "quest", "complete", "complete", run=repr(r)); _clear_legacy(q, "reward")
+    return migrated
+
+
+def _hookify_all():
+    return sum(_hookify_player(p) for p in WORLD.values())
+
+
+def cmd_hook(rest):
+    """/hook new <name>{on:..., context:..., condition:..., run:...}   define a reusable hook
+       /hook list · /hook modify <name> <set|add|reset> <field> [value] · /hook delete <name>
+       /hook attach <selector> <hook>      make targets wear the hook (adds to their nbt.hooks)
+       /hook fire <selector> <event>       manually emit an event on targets (for testing)
+    `on` = the event (equip/gain/cast/turn.end/… or a flag); `run` = a Reaction; `condition` = a Proc;
+    `context` = item/ability/talent/effect/quest or blank (any)."""
+    sub, _, arg = rest.partition(" ")
+    sub, arg = sub.strip(), arg.strip()
+    if sub == "migrate":
+        n = _hookify_all()
+        print(f"  migrated {n} legacy field(s) into hooks" if n else "  nothing to migrate (already on hooks)")
+        return True
+    if sub == "list":
+        if not WORLD_HOOKS:
+            print("  (no hooks defined)")
+            return []
+        for h in WORLD_HOOKS.values():
+            print(f"  {h}")
+        return sorted(WORLD_HOOKS)
+    if sub == "new":
+        try:
+            ident, nbt, _ = parse_item_text(arg)
+        except ValueError as error:
+            print(f"  parse error: {error}")
+            return False
+        WORLD_HOOKS[ident] = Hook.from_nbt(ident, dict(nbt))
+        print(f"  defined hook {WORLD_HOOKS[ident]}")
+        return True
+    if sub in ("modify", "delete"):
+        name, _, ops = arg.partition(" ")
+        hook = WORLD_HOOKS.get(name)
+        if hook is None:
+            print(f"  no hook '{name}'")
+            return False
+        if sub == "delete":
+            del WORLD_HOOKS[name]
+            print(f"  deleted hook '{name}'")
+            return True
+        if not ops.strip():
+            print("  usage: /hook modify <name> <set|add|reset> <field> [value]")
+            return False
+        _apply_ops(hook, ops.strip())
+        print(f"  {hook}")
+        return True
+    if sub == "attach":
+        sel, rem = _split_selector(arg)
+        targets = _resolved(sel)
+        if targets is None:
+            return False
+        hookname = rem.strip().split()[0] if rem.strip() else ""
+        if hookname not in WORLD_HOOKS:
+            print(f"  no hook '{hookname}' (see /hook list)")
+            return False
+        for nm, player in targets:
+            worn = list(_proc_tokens(player.nbt.get("hooks")))
+            if hookname not in worn:
+                worn.append(hookname)
+            player.nbt["hooks"] = worn
+            print(f"  {nm}: now wears hook '{hookname}'")
+        return True
+    if sub == "fire":
+        sel, rem = _split_selector(arg)
+        targets = _resolved(sel)
+        if targets is None:
+            return False
+        event = rem.strip().split()[0] if rem.strip() else ""
+        for nm, player in targets:
+            _report_fired(nm, _emit(player, event))
+        return True
+    print("  usage: /hook <new|list|modify|delete|attach|fire> ...")
+    return False
 
 
 def cmd_proc(rest):
@@ -3663,9 +5155,26 @@ def cmd_function(rest):
     sub, arg = sub.strip(), arg.strip()
     if sub in ("edit", "create"):
         if not arg:
-            print("  usage: /function edit <path>")
+            print("  usage: /function edit <path>   (add command lines after the path to set it directly)")
             return False
-        return _function_editor(arg.split()[0])
+        # Inline body: path on the first line, the body on the lines after it. This sets the function
+        # directly — works from the UI and the console alike. A BARE path (no body lines) opens the
+        # interactive line editor in a real terminal; in the UI (no tty) it just shows the current body.
+        first, newline, body = arg.partition("\n")
+        path = first.split()[0]
+        if newline:
+            lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+            FUNCTIONS[path] = lines
+            print(f"  saved '{path}' ({len(lines)} line(s)).")
+            return True
+        if sys.stdin.isatty():
+            return _function_editor(path)
+        existing = FUNCTIONS.get(path)
+        if existing is None:
+            print(f"  '{path}' is new — send the body on lines after the path to set it.")
+        else:
+            _print_function(path, existing)
+        return True
     if sub in ("run", "execute"):  # 'run' is the name; 'execute' kept as a quiet alias
         path, _, sel = arg.partition(" ")
         if not path.strip():
@@ -3715,20 +5224,55 @@ def _unjson(value):
     return value
 
 
+def _ability_to_dict(a):
+    d = {
+        "name": a.name,
+        "level": a.level,
+        "description": a.description,
+        "cooldown": repr(a.cooldown) if a.cooldown else None,
+        "cost": repr(a.cost) if a.cost else None,
+        "on_hit": repr(a.on_hit) if a.on_hit else None,
+        "origin": a.origin or None,
+    }
+    d.update(a.nbt)
+    return d
+
+
+def _quest_to_dict(q):
+    """A quest as JSON-able structured data (like _ability_to_dict) so its `objectives` list travels
+    intact to the UI and the session file instead of being squeezed through a repr string."""
+    d = {
+        "name": q.name,
+        "description": q.description,
+        "reward": repr(q.reward) if q.reward else None,
+        "expiration": q.expiration,
+        "expire_on": q.expire_on,
+        "expire_when": repr(q.expire_when) if getattr(q, "expire_when", None) else None,
+        "objectives": [dict(o) for o in getattr(q, "objectives", [])],
+    }
+    d.update(q.nbt)
+    return d
+
+
 def _player_to_dict(p):
     return {
         "name": p.name,
         "inventory_slots": p.inventory.slots,
         "nbt": {k: _jsonable(v) for k, v in p.nbt.items()},
-        "stats": {s.name: _jsonable(s.value) for s in p.stat},
+        "stats": {s.name: _jsonable(_effective_stat(p, s.name)) for s in p.stat},  # final = (base+gear)*mult+flat
+        "stat_detail": {s.name: dict(zip(("base", "mult", "flat"), _stat_components(p, s.name))) for s in p.stat},
         "formulas": {n: str(p.formula.get(n)) for n in p.formula},
         "proc_state": dict(p.proc_state),
         "items": [repr(it) for it in p.inventory.items],
+        "inventory_space": _effective_inventory_space(p),   # live grid containers (base + item-provided)
         "equipment": {slot: [repr(it) for it in items] for slot, items in p.equipment.equipped().items()},
+        # NB: item-granted elements (tagged _granted_by) ARE included — the UI needs them (to show the
+        # source badge). They round-trip harmlessly: _player_from_dict calls _refresh_inventory, and
+        # _regrant_items reconciles by diff (re-derives from current items; no duplication, stale removed).
         "talents": [repr(t) for t in p.talent],
-        "abilities": [repr(a) for a in p.ability],
+        "abilities": [_ability_to_dict(a) for a in p.ability],
         "effects": [{"repr": repr(e), "elapsed": e._elapsed, "total": e._total} for e in p.effect],
-        "quests": [repr(q) for q in p.quest],
+        "quests": [_quest_to_dict(q) for q in p.quest],
     }
 
 
@@ -3754,13 +5298,22 @@ def _player_from_dict(d):
     for r in d.get("talents", []):
         p.talent.add(Talent.from_nbt(*parse_item_text(r)[:2]))
     for r in d.get("abilities", []):
-        p.ability.add(Ability.from_nbt(*parse_item_text(r)[:2]))
+        if isinstance(r, dict):
+            nbt = {k: v for k, v in r.items() if k != "name" and v is not None}
+            p.ability.add(Ability.from_nbt(r.get("name", ""), nbt))
+        else:
+            p.ability.add(Ability.from_nbt(*parse_item_text(r)[:2]))
     for e in d.get("effects", []):
         effect = Effect.from_nbt(*parse_item_text(e["repr"])[:2])
         effect._elapsed, effect._total = e.get("elapsed", 0), e.get("total")
         p.effect.add(effect)
     for r in d.get("quests", []):
-        p.quest.add(Quest.from_nbt(*parse_item_text(r)[:2]))
+        if isinstance(r, dict):                              # structured form: objectives travel as a real list
+            nbt = {k: v for k, v in r.items() if k != "name" and v is not None}
+            p.quest.add(Quest.from_nbt(r.get("name", ""), nbt))
+        else:                                                # legacy sessions stored quests as a repr string
+            p.quest.add(Quest.from_nbt(*parse_item_text(r)[:2]))
+    _refresh_inventory(p)   # re-derive item-granted talents/abilities/effects/quests/flags + recompute
     return p
 
 
@@ -3776,6 +5329,7 @@ def _session_to_dict():
         "cal_events": list(CAL_EVENTS),
         "vars": {k: _jsonable(v) for k, v in VARS.items()},
         "functions": {k: list(v) for k, v in FUNCTIONS.items()},
+        "hooks": {name: repr(h) for name, h in WORLD_HOOKS.items()},
         "history": list(HISTORY),
         "players": {name: _player_to_dict(p) for name, p in WORLD.items()},
     }
@@ -3801,6 +5355,10 @@ def _session_from_dict(data):
     VARS.update({k: _unjson(v) for k, v in data.get("vars", {}).items()})
     FUNCTIONS.clear()
     FUNCTIONS.update({k: list(v) for k, v in data.get("functions", {}).items()})
+    WORLD_HOOKS.clear()
+    for name, rep in data.get("hooks", {}).items():
+        WORLD_HOOKS[name] = Hook.from_nbt(*parse_item_text(rep)[:2])
+    _hookify_all()   # fold any legacy proc/reaction/on_apply/on_clear in loaded elements into hooks
     HISTORY.clear()
     HISTORY.extend(data.get("history", []))
 
@@ -3959,76 +5517,80 @@ def _apply_store(store, result, owner):
 
 
 def cmd_execute(rest):
-    """/execute [as <selector>] [if|unless <left> <operator> <right>] [store result|success <target>] run <command>
-    Chains clauses (Minecraft-style), then runs <command> if every if/unless clause passes:
-      as <selector>            run AS that entity, so @s = it (repeats per target for a group)
-      if <cond> / unless <cond>  require the condition true / false
+    """/execute [as <sel>] [at <sel>|<x> <y>] [if|unless <l> <op> <r>] [store ...] run <command>
+    Chains clauses left-to-right (Minecraft-style), transforming a set of (subject, position)
+    contexts, then runs <command> once per surviving context:
+      as <selector>            fork one context per matched entity, each with @s = it
+      at <selector>            set the position context to that entity's cell (@s keeps its subject)
+      at <x> <y>               set the position context to an explicit cell
+                               (the position is the reference for @[distance=..]; e.g.
+                                `/execute at @s run proc enable @a[distance=..2] rallied:true`)
+      if <cond> / unless <cond>  keep only contexts where the condition is true / false
       store result|success <target>   capture the command's return value / 1|0 into:
           var $(name)[->cast]          a $() variable     (same as /data result|success)
           entity <selector> <path>     an entity's stats.X / attributes.X / nbt.X
     <left>/<right> are paths (@s.stat.health) or literals; <operator> is > < >= <= = != .
       /execute as noael store result var $(hp)->float run stat get @s health
       /execute store result entity mira stats.health run stat get noael health"""
-    global SELF
+    global SELF, AT_POS
     clauses, sep, command = rest.strip().partition(" run ")
     if not sep or not command.strip():
-        print("  usage: /execute [as <sel>] [if|unless <l> <op> <r>] [store result|success <target>] run <command>")
+        print("  usage: /execute [as <sel>] [at <sel>|<x> <y>] [if|unless <l> <op> <r>] [store ...] run <command>")
         return False
     command = _substitute(command.strip())          # the run-command: substitute $() now
     tokens = clauses.split()
-    as_selector, conditions, store, i = None, [], None, 0
+    # contexts = a list of (self, pos) the chain runs in; clauses transform it left-to-right (MC-style)
+    contexts, store, i = [(SELF, AT_POS)], None, 0
+
+    def in_ctx(ctx, fn):                            # run fn with SELF/AT_POS bound to this context
+        global SELF, AT_POS
+        save = (SELF, AT_POS)
+        SELF, AT_POS = ctx
+        try:
+            return fn()
+        finally:
+            SELF, AT_POS = save
+
     while i < len(tokens):
         word = tokens[i]
-        if word == "as" and i + 1 < len(tokens):
-            as_selector = _substitute(tokens[i + 1])
-            i += 2
+        if word == "as" and i + 1 < len(tokens):    # fork one context per matched entity (sets @s)
+            sel = _substitute(tokens[i + 1]); i += 2
+            contexts = [(t, ctx[1]) for ctx in contexts for _n, t in (in_ctx(ctx, lambda: _resolve(sel)) or [])]
+        elif word == "at" and i + 1 < len(tokens):  # set the position context (@[distance] measures from here)
+            if i + 2 < len(tokens) and tokens[i + 1].lstrip("-").isdigit() and tokens[i + 2].lstrip("-").isdigit():
+                pos = (int(tokens[i + 1]), int(tokens[i + 2])); i += 3
+                contexts = [(ctx[0], pos) for ctx in contexts]
+            else:
+                sel = _substitute(tokens[i + 1]); i += 2
+                contexts = [(ctx[0], _entity_pos(t)) for ctx in contexts for _n, t in (in_ctx(ctx, lambda: _resolve(sel)) or [])]
         elif word in ("if", "unless"):
             if len(tokens) - i < 4:
-                print(f"  '{word}' needs: {word} <left> <operator> <right>")
-                return False
-            conditions.append((word == "unless", _substitute(tokens[i + 1]), tokens[i + 2], _substitute(tokens[i + 3])))
-            i += 4
+                print(f"  '{word}' needs: {word} <left> <operator> <right>"); return False
+            neg, lt, op, rt = word == "unless", _substitute(tokens[i + 1]), tokens[i + 2], _substitute(tokens[i + 3]); i += 4
+            contexts = [c for c in contexts if in_ctx(c, lambda: _check_condition(neg, lt, op, rt))]
         elif word == "store":
             if len(tokens) - i < 4 or tokens[i + 1] not in ("result", "success"):
-                print("  store needs: store result|success var $(name) | entity <selector> <path>")
-                return False
+                print("  store needs: store result|success var $(name) | entity <selector> <path>"); return False
             mode, ttype = tokens[i + 1], tokens[i + 2]
-            if ttype == "var":  # KEEP $(name) literal — it's the target being defined
-                store = (mode, "var", tokens[i + 3])
-                i += 4
+            if ttype == "var":
+                store = (mode, "var", tokens[i + 3]); i += 4
             elif ttype == "entity":
                 if len(tokens) - i < 5:
-                    print("  store entity needs: store result|success entity <selector> <path>")
-                    return False
-                store = (mode, "entity", _substitute(tokens[i + 3]), tokens[i + 4])
-                i += 5
+                    print("  store entity needs: store result|success entity <selector> <path>"); return False
+                store = (mode, "entity", _substitute(tokens[i + 3]), tokens[i + 4]); i += 5
             else:
-                print(f"  unknown store target '{ttype}' (use var or entity)")
-                return False
+                print(f"  unknown store target '{ttype}' (use var or entity)"); return False
         else:
-            print(f"  unexpected '{word}' in /execute (expected as / if / unless / store / run)")
+            print(f"  unexpected '{word}' in /execute (expected as / at / if / unless / store / run)")
             return False
-    runners = [None]  # run once with the current @s
-    if as_selector is not None:
-        targets = _resolved(as_selector)
-        if targets is None:
-            return False
-        runners = [player for _name, player in targets]
     ran = False
-    for player in runners:
-        previous = SELF
-        if player is not None:
-            SELF = player
-        try:
-            if all(_check_condition(*cond) for cond in conditions):
-                result = dispatch(_as_command_line(command))
-                if store:
-                    _apply_store(store, result, player)
-                ran = True
-        finally:
-            SELF = previous
+    for ctx in contexts:
+        result = in_ctx(ctx, lambda: dispatch(_as_command_line(command)))
+        if store:
+            _apply_store(store, result, ctx[0])
+        ran = True
     if not ran:
-        print("  condition(s) not met — nothing run" if conditions else "  (nothing to run)")
+        print("  condition(s)/selector left nothing to run")
     return ran
 
 
@@ -4127,6 +5689,195 @@ def cmd_help(rest):
     return False
 
 
+def cmd_storyline(rest):
+    """/storyline add <selector> <turn> <text>     add a story entry at a world turn (markdown ok)
+       /storyline edit <selector> <id> <text>      replace an entry's text (id from /storyline list)
+       /storyline remove <selector> <id>           delete an entry
+       /storyline list <selector>                  show entries + notes
+       /storyline note <selector> <text>           set the DM notes (private)
+       /storyline summary <selector> <text>        set the player's 'last turn summary'
+    Per-player: entries live in nbt.storyline [{id,turn,text}]; notes in nbt.dm_notes / nbt.last_summary.
+    Text is taken literally (no dice/$() substitution) so prose and markdown survive."""
+    sub, _, arg = rest.partition(" ")
+    sub = sub.strip()
+    sel, remainder = _split_selector(arg)
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    if sub == "list":
+        for name, p in targets:
+            entries = sorted(p.nbt.get("storyline") or [], key=lambda e: e.get("turn", 0))
+            print(f"  {name}.storyline: {len(entries)} entr{'y' if len(entries) == 1 else 'ies'}")
+            for e in entries:
+                print(f"    [{e.get('id')}] turn {e.get('turn')}: {str(e.get('text', '')).splitlines()[0][:60] if e.get('text') else ''}")
+            if p.nbt.get("dm_notes"):
+                print(f"    dm_notes: {str(p.nbt['dm_notes']).splitlines()[0][:60]}")
+            if p.nbt.get("last_summary"):
+                print(f"    last_summary: {str(p.nbt['last_summary']).splitlines()[0][:60]}")
+        return True
+    if sub == "add":
+        turn_tok, _, text = remainder.partition(" ")
+        if not turn_tok.lstrip("-").isdigit() or not text.strip():
+            print("  usage: /storyline add <selector> <turn> <text>")
+            return False
+        for name, p in targets:
+            entries = p.nbt.setdefault("storyline", [])
+            entries.append({"id": max((e.get("id", 0) for e in entries), default=0) + 1,
+                            "turn": int(turn_tok), "text": text})
+            print(f"  {name}: story entry added at turn {turn_tok}")
+        return True
+    if sub in ("edit", "remove"):
+        id_tok, _, text = remainder.partition(" ")
+        if not id_tok.lstrip("-").isdigit():
+            print(f"  usage: /storyline {sub} <selector> <id> {'<text>' if sub == 'edit' else ''}")
+            return False
+        sid, ok = int(id_tok), False
+        for name, p in targets:
+            entries = p.nbt.get("storyline") or []
+            entry = next((e for e in entries if e.get("id") == sid), None)
+            if entry is None:
+                print(f"  {name}: no story entry [{sid}]")
+                continue
+            if sub == "remove":
+                entries.remove(entry)
+                print(f"  {name}: removed story entry [{sid}]")
+                ok = True
+            elif text.strip():
+                entry["text"] = text
+                print(f"  {name}: edited story entry [{sid}]")
+                ok = True
+            else:
+                print("  usage: /storyline edit <selector> <id> <text>")
+        return ok
+    if sub in ("note", "summary"):
+        key = "dm_notes" if sub == "note" else "last_summary"
+        for name, p in targets:
+            p.nbt[key] = remainder
+            print(f"  {name}: {sub} set")
+        return True
+    print("  usage: /storyline <add|edit|remove|list|note|summary> <selector> ...")
+    return False
+
+
+ALLEGIANCE_KINDS = ("ally", "neutral", "hostile")
+
+
+def cmd_allegiance(rest):
+    """/allegiance <player> <target> <ally|neutral|hostile>   how <player> regards <target> — per-player,
+                                       so a mob can be hostile to one PC and an ally to another. Drives the
+                                       atlas dot color from that player's viewpoint. Unlisted = neutral.
+       /allegiance <player> list             show this player's set allegiances
+       /allegiance <player> clear <target>   remove an entry (back to neutral)"""
+    parts = rest.split()
+    if len(parts) < 2:
+        print("  usage: /allegiance <player> <target> <ally|neutral|hostile> | list | clear <target>")
+        return False
+    pname, player = parts[0], WORLD.get(parts[0])
+    if player is None:
+        print(f"  no character '{pname}'")
+        return False
+    table = player.nbt.get("allegiance")
+    if not isinstance(table, dict):
+        table = {}
+        player.nbt["allegiance"] = table
+    if parts[1] == "list":
+        if not table:
+            print(f"  {pname}: no allegiances set (everyone defaults to neutral)")
+        for target, disp in table.items():
+            print(f"  {pname} -> {target}: {disp}")
+        return True
+    if parts[1] in ("clear", "remove") and len(parts) >= 3:
+        table.pop(parts[2], None)
+        print(f"  {pname}: {parts[2]} reset to neutral")
+        return True
+    if len(parts) < 3 or parts[2] not in ALLEGIANCE_KINDS:
+        print("  usage: /allegiance <player> <target> <ally|neutral|hostile>")
+        return False
+    table[parts[1]] = parts[2]
+    print(f"  {pname} now regards {parts[1]} as {parts[2]}")
+    return True
+
+
+def cmd_combat(rest):
+    """/combat rule <selector> <channel> = <formula>   set a PER-PLAYER combat rule (overrides the
+                                       shared combat_rules.csv for that player only). The formula uses
+                                       atk.raw / atk.pen / def.res and MAY read the attacker's own stats
+                                       (e.g. stat.crit_chance), which resolve per-player.
+       /combat rule  <selector> <channel> reset    drop the override (back to the shared default)
+       /combat rules <selector>                     list this player's rule overrides
+    Channels are the combat.csv channels (physical, magic, …); unset channels use the default."""
+    sub, _, arg = rest.partition(" ")
+    sub = sub.strip()
+    sel, remainder = _split_selector(arg.strip())
+    targets = _resolved(sel)
+    if targets is None:
+        return False
+    if sub in ("rules", "list"):
+        for name, player in targets:
+            own = player.nbt.get("combat_rules") if isinstance(player.nbt.get("combat_rules"), dict) else {}
+            print(f"  {name}.combat_rules:")
+            for ch in sorted(set(COMBAT_RULES) | set(own)):
+                src = own.get(ch); print(f"    {ch} = {src}  (override)" if src else f"    {ch} = {COMBAT_RULES.get(ch)}  (default)")
+        return True
+    if sub == "rule":
+        parts = remainder.split(None, 1)
+        channel = parts[0] if parts else ""
+        body = (parts[1].strip() if len(parts) > 1 else "")
+        if not channel:
+            print("  usage: /combat rule <selector> <channel> = <formula>  |  <channel> reset")
+            return False
+        for name, player in targets:
+            table = player.nbt.setdefault("combat_rules", {})
+            if body == "" or body.lower() == "reset":
+                table.pop(channel, None)
+                print(f"  {name}: combat rule '{channel}' reset to default")
+            else:
+                expr = body[1:].strip() if body.startswith("=") else body
+                table[channel] = expr
+                print(f"  {name}: combat rule '{channel}' = {expr}")
+        return True
+    print("  usage: /combat rule <selector> <channel> = <formula> | <channel> reset  ·  /combat rules <selector>")
+    return False
+
+
+def cmd_coverage(rest):
+    """/coverage <player> <slot> <pct>   set a PER-PLAYER body-coverage % for an equip slot (overrides the
+       shared body_coverage.csv default for that player). /coverage <player> <slot> reset · <player> list."""
+    parts = rest.split()
+    if not parts:
+        print("  usage: /coverage <player> <slot> <pct|reset>  |  /coverage <player> list")
+        return False
+    player = WORLD.get(parts[0])
+    if player is None:
+        print(f"  no character '{parts[0]}'")
+        return False
+    table = player.nbt.get("coverage")
+    if not isinstance(table, dict):
+        table = {}
+        player.nbt["coverage"] = table
+    if len(parts) < 2 or parts[1] == "list":
+        if not table:
+            print(f"  {parts[0]}: no coverage overrides (using body_coverage.csv defaults)")
+        for slot, val in table.items():
+            print(f"  {parts[0]}.coverage.{slot} = {val}%  (override)")
+        return True
+    if len(parts) < 3:
+        print("  usage: /coverage <player> <slot> <pct|reset>")
+        return False
+    slot = parts[1]
+    if parts[2].lower() == "reset":
+        table.pop(slot, None)
+        print(f"  {parts[0]}: coverage '{slot}' reset to default")
+        return True
+    try:
+        table[slot] = float(parts[2])
+    except ValueError:
+        print("  pct must be a number (or 'reset')")
+        return False
+    print(f"  {parts[0]}: coverage '{slot}' = {table[slot]}%")
+    return True
+
+
 # --- dispatch ----------------------------------------------------------------
 
 HANDLERS = {
@@ -4136,12 +5887,14 @@ HANDLERS = {
     "move": cmd_move,
     "formula": cmd_formula,
     "item": cmd_item,
+    "container": cmd_container,
     "kill": cmd_kill,
     "turn": cmd_turn,
     "talent": cmd_talent,
     "effect": cmd_effect,
     "ability": cmd_ability,
     "proc": cmd_proc,
+    "hook": cmd_hook,
     "data": cmd_data,
     "function": cmd_function,
     "calendar": cmd_calendar,
@@ -4151,8 +5904,12 @@ HANDLERS = {
     "session": cmd_session,
     "execute": cmd_execute,
     "tellraw": cmd_tellraw,
+    "allegiance": cmd_allegiance,
+    "combat": cmd_combat,
+    "coverage": cmd_coverage,
     "random": cmd_random,
     "quest": cmd_quest,
+    "storyline": cmd_storyline,
     "structure": cmd_structure,
     "uuid": cmd_uuid,
     "help": cmd_help,
@@ -4242,6 +5999,12 @@ def _confirm_or_undo(snapshot, warnings):
         print(f"    - {warning}")
     missing = list(_MISSING_FNS)
     _MISSING_FNS.clear()
+    if not sys.stdin.isatty():  # UI / piped: no way to answer a prompt — keep + show the warnings (chosen behavior)
+        if missing:
+            print("  (kept — function(s) not defined yet: " + ", ".join(missing) + " — create with /function edit)")
+        else:
+            print("  (kept — fix the above when you're ready)")
+        return True
     label = "[y = revert / n = keep" + (" / c = create the missing function(s) now" if missing else "") + "]"
     answer = _read_choice(f"  undo this change? {label}: ")
     if answer in ("y", "yes"):
@@ -4258,7 +6021,18 @@ def _confirm_or_undo(snapshot, warnings):
     return True
 
 
+# Serializes every command so the UI (server thread) and a live terminal shell (main thread) can't
+# mutate WORLD at the same time. Reentrant: a function/execute body re-enters dispatch on the SAME
+# thread without deadlocking; only cross-thread calls actually wait.
+_DISPATCH_LOCK = threading.RLock()
+
+
 def dispatch(line):
+    with _DISPATCH_LOCK:
+        return _dispatch(line)
+
+
+def _dispatch(line):
     if not line.startswith("/"):
         if re.fullmatch(r"\s*d\d+(\s+d\d+)*\s*", line):  # bare dice: 'd20' or 'd2 d3 d4' -> rolls
             rolls = [str(_roll(int(n))) for n in re.findall(r"d(\d+)", line)]
@@ -4269,9 +6043,10 @@ def dispatch(line):
     full = autofill.complete_command("/" + word)  # expand abbreviations: /char -> /character
     name = full[1:] if full else word
     handler = HANDLERS.get(name)
-    if name not in ("data", "execute"):
-        rest = _substitute(rest)  # /data and /execute do their own selective substitution
-        #   (so a $(name) being DEFINED stays literal while operands/commands get substituted)
+    if name not in ("data", "execute", "function", "storyline"):
+        rest = _substitute(rest)  # /data, /execute, /function do their own / no substitution
+        #   (so a $(name) being DEFINED stays literal while operands/commands get substituted;
+        #    /function bodies are stored LITERALLY and substituted at run time, not at edit time)
     if handler:
         parse_warnings()  # clear any stale warnings before running
         _MISSING_FNS.clear()
@@ -4304,17 +6079,23 @@ VALUE_CMDS = {"stat": "stat"}
 SUBCOMMANDS = {
     "character": ["new", "modify", "get", "show", "list", "remove"],
     "item": ITEM_SUBS,  # 'new' is canonical now (add/give still work as hidden aliases)
+    "container": CONTAINER_SUBS,
     "turn": ["query", "next", "add", "set"],  # turn 'add' = + operator, stays
     **{cmd: ["new", "list", "modify", "remove"] for cmd in COLLECTION_CMDS},
     "ability": ["new", "list", "modify", "remove", "cast"],
     "function": ["edit", "run", "list", "show", "remove"],
     "calendar": ["show", "add", "set", "event", "date"],  # calendar 'add' = move time (operator)
-    "map": ["view", "pos", "get", "set", "new", "recommend"],
+    "map": ["generate", "expand", "look", "dim", "hide", "view", "pos", "get", "set", "new", "recommend"],
+    "allegiance": ["list", "clear", "ally", "neutral", "hostile"],
+    "combat": ["rule", "rules"],
+    "hook": ["new", "list", "modify", "delete", "attach", "fire"],
+    "coverage": ["list"],
     "session": ["save", "load", "get", "history", "list"],
-    "quest": ["new", "complete", "modify", "delete", "list"],
+    "quest": ["new", "complete", "modify", "delete", "list", "objective"],
+    "storyline": ["add", "edit", "remove", "list", "note", "summary"],
     "structure": ["new", "delete", "modify", "list"],
     "uuid": ["get", "lookup", "set", "list"],
-    **{cmd: ["new", "get", "list", "modify", "remove"] for cmd in VALUE_CMDS},
+    **{cmd: ["new", "get", "list", "modify", "remove"] for cmd in VALUE_CMDS},  # base|multiplier|flat live UNDER modify
 }
 OPS3 = ["set", "add", "reset"]
 
@@ -4330,9 +6111,14 @@ def _relevant_procs(selector_token):
     if player is None:
         return []
     names = set(player.proc_state)
-    for talent in player.talent:
-        if isinstance(talent.proc, Proc):
+    for talent in player.talent:   # legacy talents (pre-migration) may still carry a proc clause
+        if isinstance(getattr(talent, "proc", None), Proc):
             for clause in talent.proc.clauses:
+                names.update(clause)
+    for name, _kind in _owner_hook_pairs(player):   # flags now live in the hooks the player wears
+        hook = WORLD_HOOKS.get(name)
+        if hook and isinstance(hook.condition, Proc):
+            for clause in hook.condition.clauses:
                 names.update(clause)
     return sorted(names)
 
@@ -4503,7 +6289,7 @@ def _completion_pool(cmd, args_before):
         sub, after = args_before[0], args_before[1:]
         if len(after) == 0:
             return sel
-        if sub in ("complete", "modify", "delete") and len(after) == 1:
+        if sub in ("complete", "modify", "delete", "objective") and len(after) == 1:
             return _member_pool(after[0], "quest")
         if sub == "modify" and len(after) == 2:
             return OPS3
@@ -4511,6 +6297,10 @@ def _completion_pool(cmd, args_before):
             return _member_keys(after[0], "quest", after[1])
         if sub == "delete" and len(after) == 2:
             return ["true", "false"]
+        if sub == "objective" and len(after) == 2:           # /quest objective <sel> <quest> <verb>
+            return ["list", "add", "clear"]
+        if sub == "objective" and len(after) == 3 and after[2] == "add":
+            return list(OBJECTIVE_TYPES)                      # add binary|segment|percent
         return []
     if cmd == "uuid":
         if not args_before:
@@ -4562,7 +6352,29 @@ def _completion_pool(cmd, args_before):
             return ["at"]
         return []
     if cmd == "map":
-        return ["view", "pos", "get", "set", "new", "recommend"] if not args_before else []
+        if not args_before:
+            return SUBCOMMANDS["map"]
+        sub, after = args_before[0], args_before[1:]
+        if sub == "expand" and len(after) == 0:
+            return ["north", "south", "east", "west"]
+        if sub in ("look", "scout", "reveal", "dim", "hide", "unsee", "pos", "view") and len(after) == 0:
+            return sel       # a player/selector
+        return []
+    if cmd == "combat":
+        if not args_before:
+            return SUBCOMMANDS["combat"]
+        sub, after = args_before[0], args_before[1:]
+        if len(after) == 0:
+            return sel
+        if sub == "rule" and len(after) == 1:
+            return sorted(COMBAT_RULES)   # channel names (physical, magic, …)
+        return []
+    if cmd == "coverage":
+        if not args_before:
+            return sel
+        if len(args_before) == 1:
+            return ["list"] + sorted(BODY_COVERAGE)   # a slot name (or 'list')
+        return []
     if cmd == "summon":
         if not args_before:
             return list(BESTIARY)  # known species (free-form names also allowed)
@@ -4610,7 +6422,7 @@ def _completion_pool(cmd, args_before):
         if sub == "run" and len(after) == 1:
             return sel  # the selector to run it on
         return []
-    if cmd in ("character", "item") or cmd in COLLECTION_CMDS or cmd in VALUE_CMDS:
+    if cmd in ("character", "item", "container") or cmd in COLLECTION_CMDS or cmd in VALUE_CMDS:
         if not args_before:
             return SUBCOMMANDS.get(cmd, [])
         sub, after = args_before[0], args_before[1:]
@@ -4625,16 +6437,28 @@ def _completion_pool(cmd, args_before):
                 return _object_keys(_selector_player(after[0]))
         elif cmd == "item":
             # every item subcommand whose FIRST arg is a selector (incl. the add/give aliases of new)
-            if sub in ("new", "add", "give", "equip", "unequip", "use", "remove", "list", "modify") and len(after) == 0:
+            if sub in ("new", "add", "give", "equip", "unequip", "use", "remove", "list", "modify", "place", "rotate") and len(after) == 0:
                 return sel
             if sub == "loot" and len(after) == 1:
                 return sel
-            if sub in ("remove", "modify", "equip", "use") and len(after) == 1:
+            if sub in ("remove", "modify", "equip", "use", "place", "rotate") and len(after) == 1:
                 return _member_pool(after[0], "inventory")  # the item (equip/use pulls from inventory)
+            if sub == "place" and len(after) == 2:
+                return [str(c.get("id")) for c in _effective_inventory_space(_selector_player(after[0]))] if _selector_player(after[0]) else []
             if sub == "modify" and len(after) == 2:
                 return OPS3
             if sub == "modify" and len(after) == 3:
                 return _item_keys(after[0], after[1])
+        elif cmd == "container":
+            if sub in ("new", "modify", "delete", "list") and len(after) == 0:
+                return sel
+            if sub in ("modify", "delete") and len(after) == 1:
+                p = _selector_player(after[0])
+                return [str(c.get("id")) for c in _base_containers(p)] if p else []
+            if sub == "modify" and len(after) == 2:
+                return OPS3
+            if sub == "modify" and len(after) == 3:
+                return ["label", "color", "style", "cells", "id"]
         elif cmd in COLLECTION_CMDS:
             container_attr = COLLECTION_CMDS[cmd]
             if sub in ("new", "list", "modify", "remove", "cast") and len(after) == 0:
@@ -4650,12 +6474,17 @@ def _completion_pool(cmd, args_before):
         elif cmd in VALUE_CMDS:
             container_attr = VALUE_CMDS[cmd]
             schema = STAT_NAMES
+            CH = ["base", "multiplier", "flat"]    # layered-modify channels (mult is a hidden alias)
             if sub in ("new", "get", "list", "modify", "remove") and len(after) == 0:
                 return sel
-            if sub in ("new", "get", "modify", "remove") and len(after) == 1:
+            if sub == "modify" and len(after) == 1:
+                return CH        # pick the layer FIRST (base|multiplier|flat) — then the stat name
+            if sub in ("new", "get", "remove") and len(after) == 1:
                 return _value_name_pool(after[0], container_attr, schema)
-            if sub == "modify" and len(after) == 2:
-                return OPS3
+            if sub == "modify" and len(after) == 2:              # channel -> stat name; else -> the op
+                return _value_name_pool(after[0], container_attr, schema) if after[1] in STAT_CHANNELS else OPS3
+            if sub == "modify" and len(after) == 3 and after[1] in STAT_CHANNELS:
+                return OPS3                                      # /stat modify <sel> <channel> <stat> <op>
         return []
     return []
 
@@ -4724,8 +6553,39 @@ def _display_matches(substitution, matches, longest_match_length):
 
 def _complete_line(buffer, text, bare=False):
     """Completions for one command line; also sets _DISPLAY_GROUPS for the listing.
-    `bare`=True drops the leading '/' from command-name suggestions (used after /var's 'run')."""
+    `bare`=True drops the leading '/' from command-name suggestions (used after a 'run').
+    The buffer-level rewrites below (run-command, $()-vars, ranges) live HERE rather than only in
+    the readline wrapper, so the web UI's /complete endpoint (which calls this directly) gets them too
+    — e.g. after `/execute ... run ` you get real command autofill (/stat, /character), not if/as/run."""
     global _DISPLAY_GROUPS
+    prior0 = buffer[:len(buffer) - len(text)].split()
+    cmdr = (autofill.complete_command(prior0[0]) or prior0[0]).lstrip("/") if prior0 else ""
+    ins = re.match(r"^:(?:ins|insert|i)\s+\d+\s", buffer)        # function editor ':ins N <command>'
+    if ins:
+        return _complete_line(buffer[ins.end():], text)
+    if cmdr == "random" and len(prior0) >= 2 and "range".startswith(prior0[1].lower()) and re.fullmatch(r"\d+", text):
+        _DISPLAY_GROUPS = [[text + ".."]]                       # '1' + TAB -> '1..' (Minecraft range)
+        return [text + ".."]
+    if (re.match(r"^/data\s+(result|success|set)\s+\$\(\w+\)->\w*$", buffer)
+            or (buffer.lstrip().startswith("/execute") and re.search(r"\bstore\s+(result|success)\s+var\s+\$\(\w+\)->\w*$", buffer))):
+        head = text[:text.find("->") + 2] if "->" in text else text
+        options = [head + t for t in DATATYPES if (head + t).startswith(text)]
+        _DISPLAY_GROUPS = [options]
+        return options
+    run = re.match(r"^/data\s+\S+\s+\S+\s+run\s", buffer)        # /data ... run <command> -> complete it
+    if run:
+        return _complete_line(buffer[run.end():], text, bare=True)
+    erun = re.match(r"^/execute\s+.*?\srun\s", buffer)           # /execute ... run <command> -> complete it
+    if erun:
+        return _complete_line(buffer[erun.end():], text, bare=True)
+    if cmdr == "data" and len(prior0) == 2 and prior0[1] in ("result", "success", "set"):
+        return _var_name_pool(text)                             # $(name)[->type] slot
+    if cmdr == "execute" and len(prior0) >= 3 and prior0[-3] == "store" and prior0[-2] in ("result", "success") and prior0[-1] == "var":
+        return _var_name_pool(text)
+    if cmdr == "data" and len(prior0) == 3 and prior0[1] in ("result", "success"):
+        options = [c for c in ["run"] if c.startswith(text)]
+        _DISPLAY_GROUPS = [options]
+        return options
     if _in_path_bracket(buffer):
         options = _path_completions(text, buffer)
         _DISPLAY_GROUPS = [options]
@@ -4762,49 +6622,12 @@ def _complete_line(buffer, text, bare=False):
 
 
 def _gather(text):
-    """Compute the completion candidates for the current line and set _DISPLAY_GROUPS."""
+    """Compute the completion candidates for the current readline line and set _DISPLAY_GROUPS.
+    All the buffer-level handling now lives in _complete_line (so the UI gets it too); this is just
+    the readline entry point."""
     global _DISPLAY_GROUPS
     _DISPLAY_GROUPS = None
-    buffer = readline.get_line_buffer()
-    # function editor: ':ins <N> <command>' — complete the <command> part like a normal line, so a
-    # command you're inserting still gets full autofill (the ':ins N ' prefix is stripped first).
-    ins = re.match(r"^:(?:ins|insert|i)\s+\d+\s", buffer)
-    if ins:
-        return _complete_line(buffer[ins.end():], text)
-    # /random range <min>..<max> — after a bare number, TAB inserts '..' (Minecraft-style range),
-    # so '1' + TAB -> '1..' and you keep typing the max. ('.' isn't a delimiter, so text holds it all.)
-    prior0 = buffer[:len(buffer) - len(text)].split()
-    cmdr = (autofill.complete_command(prior0[0]) or prior0[0]).lstrip("/") if prior0 else ""
-    if cmdr == "random" and len(prior0) >= 2 and "range".startswith(prior0[1].lower()) and re.fullmatch(r"\d+", text):
-        _DISPLAY_GROUPS = [[text + ".."]]
-        return [text + ".."]
-    # /data <mode> $(name)->TYPE  OR  /execute ... store result|success var $(name)->TYPE :
-    # complete the datatype as a bare word (int, float, ...).
-    if (re.match(r"^/data\s+(result|success|set)\s+\$\(\w+\)->\w*$", buffer)
-            or (buffer.lstrip().startswith("/execute") and re.search(r"\bstore\s+(result|success)\s+var\s+\$\(\w+\)->\w*$", buffer))):
-        # `>` is no longer a delimiter, so `text` is the whole '$(x)->partial' word; build the
-        # full '$(name)->TYPE' candidates (not bare types) so readline replaces the word cleanly.
-        head = text[:text.find("->") + 2] if "->" in text else text
-        options = [head + t for t in DATATYPES if (head + t).startswith(text)]
-        _DISPLAY_GROUPS = [options]
-        return options
-    run = re.match(r"^/data\s+\S+\s+\S+\s+run\s", buffer)  # autofill the run-command part
-    if run:
-        return _complete_line(buffer[run.end():], text, bare=True)
-    erun = re.match(r"^/execute\s+.*?\srun\s", buffer)  # /execute ... run <command> -> complete it
-    if erun:
-        return _complete_line(buffer[erun.end():], text, bare=True)
-    prior = buffer[:len(buffer) - len(text)].split()
-    cmd0 = (autofill.complete_command(prior[0]) or prior[0]).lstrip("/") if prior else ""
-    if cmd0 == "data" and len(prior) == 2 and prior[1] in ("result", "success", "set"):
-        return _var_name_pool(text)  # $(name)[->type] slot (display hook shows bare types)
-    if cmd0 == "execute" and len(prior) >= 3 and prior[-3] == "store" and prior[-2] in ("result", "success") and prior[-1] == "var":
-        return _var_name_pool(text)  # /execute store result var $(name) — same $()-> slot
-    if cmd0 == "data" and len(prior) == 3 and prior[1] in ("result", "success"):
-        options = [c for c in ["run"] if c.startswith(text)]
-        _DISPLAY_GROUPS = [options]
-        return options
-    return _complete_line(buffer, text)
+    return _complete_line(readline.get_line_buffer(), text)
 
 
 def _completer(text, state):

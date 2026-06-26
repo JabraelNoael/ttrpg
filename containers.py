@@ -790,7 +790,8 @@ class Item:
     GENERIC_NBT = ["name", "description", "count", "prefix", "suffix", "origin"]
     # NBT = completable-but-not-auto-filled keys: the equipment/weapon mechanics live here so they
     # show up in TAB (e.g. /item modify hero sword set <TAB>) without bloating every plain item.
-    NBT = ["equippable", "wield", "stats", "on_equip", "on_unequip", "talents"]
+    NBT = ["equippable", "wield", "stats", "on_equip", "on_unequip", "talents",
+           "shape", "pos", "inventory_space"]
 
     def __init__(self, name="", description="", quantity=1, type_id=None, **nbt):
         self.name = name
@@ -873,27 +874,21 @@ class Item:
 
 
 class Talent:
-    """A passive buff from expertise. `proc` is a Proc (trigger conditions); `reaction` is a
-    Cost-style list of class-path deltas applied to the owner when it fires (negative = damage).
-
-    e.g. proc=[{in_combat:true,end_of_turn:true}], reaction=[stats.health(-5)] -> when the
-    owner is in combat at end of turn, they take 5 damage. (Real AoE/targeting comes later;
-    for now the reaction modifies the owner's own stats.)
-    """
+    """A passive element. Its trigger conditions, reactions, and on-gain/on-lose behavior all live as
+    HOOKS now (the element wears them via nbt `hooks:[...]`) — they are no longer fields on this class.
+    The unified hook bus fires them; see Hook / WORLD_HOOKS / the migrator."""
     type_id = "talent"
-    GENERIC_NBT = ["name", "level", "description", "origin", "proc", "reaction"]
+    GENERIC_NBT = ["name", "level", "description", "origin", "hooks"]
     NBT = []
     CORE = ("name", "level", "description", "origin")
-    DEFAULTS = {"level": 1, "description": "", "origin": "", "proc": None, "reaction": None}
-    _STRUCTURED = {"name", "level", "description", "origin", "proc", "reaction"}
+    DEFAULTS = {"level": 1, "description": "", "origin": ""}
+    _STRUCTURED = {"name", "level", "description", "origin"}
 
-    def __init__(self, name="", level=1, description="", origin="", proc=None, **nbt):
+    def __init__(self, name="", level=1, description="", origin="", **nbt):
         self.name = name
         self.level = level
         self.description = description
         self.origin = origin
-        self.proc = Proc.parse(proc) if proc is not None else None
-        self.reaction = None
         self.nbt = dict(nbt)
 
     @classmethod
@@ -902,29 +897,23 @@ class Talent:
         return _fill_generic_nbt(cls(name=ident).modify(**nbt))
 
     def modify(self, **fields):
-        """Edit any field by name. proc -> Proc, reaction -> Cost; unknown keys go to nbt."""
+        """Core fields set attributes; everything else (incl. hooks + any leftover legacy proc/reaction
+        from old saves, which the migrator reads from nbt) goes to nbt."""
         for key, val in fields.items():
-            if key == "proc":
-                self.proc = Proc.parse(val) if val is not None else None
-            elif key == "reaction":
-                self.reaction = Reaction.parse(val) if val is not None else None
-            elif key in self.CORE:
+            if key in self.CORE:
                 setattr(self, key, val)
             else:
                 self.nbt[key] = val
         return self
 
     def field_value(self, key):
-        if key in ("proc", "reaction") or key in self.CORE:
-            return getattr(self, key)
-        return self.nbt.get(key)
+        return getattr(self, key) if key in self.CORE else self.nbt.get(key)
 
     def reset(self, *keys):
         return _reset_fields(self, self.DEFAULTS, keys)
 
     def __repr__(self):
-        fields = {"level": self.level, "description": self.description, "origin": self.origin,
-                  "proc": self.proc, "reaction": self.reaction}
+        fields = {"level": self.level, "description": self.description, "origin": self.origin}
         fields.update(self.nbt)
         return f"{self.name}{_nbt_string(fields)}"
 
@@ -932,7 +921,8 @@ class Talent:
 class Ability:
     """A castable with a cost and cooldown, both unit-aware via UnitValue."""
     type_id = "ability"
-    GENERIC_NBT = ["name", "description", "damage", "affinity", "cost", "cooldown", "cast_type", "on_hit"]
+    GENERIC_NBT = ["name", "description", "damage", "affinity", "cost", "cooldown", "cast_type",
+                   "on_apply", "on_hit", "on_clear"]
     NBT = []
 
     def __init__(self, name="", level=1, description="", cooldown=None, cost=None, origin="", on_hit=None, **nbt):
@@ -941,13 +931,16 @@ class Ability:
         self.description = description
         self.cooldown = Cooldown.parse(cooldown) if cooldown is not None else None
         self.cost = Cost.parse(cost) if cost is not None else None
-        self.on_hit = Reaction.parse(on_hit) if on_hit is not None else None  # applied to the TARGET
+        self.on_hit = Reaction.parse(on_hit) if on_hit is not None else None  # applied to the TARGET on cast
+        self.on_apply = None    # a Reaction run ONCE when the ability is gained (e.g. grant a 'rage' stat)
+        self.on_clear = None    # a Reaction run ONCE when the ability is removed (reverse the grant)
         self.origin = origin
         self.nbt = dict(nbt)
 
-    CORE = ("name", "level", "description", "cooldown", "cost", "on_hit", "origin")
-    DEFAULTS = {"level": 1, "description": "", "cooldown": None, "cost": None, "on_hit": None, "origin": ""}
-    _STRUCTURED = {"name", "description", "cost", "cooldown", "on_hit"}
+    CORE = ("name", "level", "description", "cooldown", "cost", "on_hit", "on_apply", "on_clear", "origin")
+    DEFAULTS = {"level": 1, "description": "", "cooldown": None, "cost": None, "on_hit": None,
+                "on_apply": None, "on_clear": None, "origin": ""}
+    _STRUCTURED = {"name", "description", "cost", "cooldown", "on_hit", "on_apply", "on_clear"}
 
     @classmethod
     def from_nbt(cls, ident, nbt):
@@ -970,8 +963,8 @@ class Ability:
                     self.cooldown.total = int(val)
             elif key == "cost":
                 self.cost = Cost.parse(val) if val is not None else None
-            elif key == "on_hit":
-                self.on_hit = Reaction.parse(val) if val is not None else None
+            elif key in ("on_hit", "on_apply", "on_clear"):
+                setattr(self, key, Reaction.parse(val) if val is not None else None)
             elif key in ("name", "level", "description", "origin"):
                 setattr(self, key, val)
             else:
@@ -986,7 +979,8 @@ class Ability:
 
     def __repr__(self):
         fields = {"level": self.level, "description": self.description, "cooldown": self.cooldown,
-                  "cost": self.cost, "on_hit": self.on_hit, "origin": self.origin}
+                  "cost": self.cost, "on_apply": self.on_apply, "on_hit": self.on_hit,
+                  "on_clear": self.on_clear, "origin": self.origin}
         fields.update(self.nbt)
         return f"{self.name}{_nbt_string(fields)}"
 
@@ -996,22 +990,33 @@ class Effect:
       duration  - how many turns it lasts (int)
       step      - WHICH of those turns it fires on, as Python slice/index specs over the
                   turn list [1..duration]:  :1 first, -1 last, ::3 every 3rd, : (or none) every turn
-      proc      - proc signals to PULSE on a firing turn (so a talent keyed on e.g. 'poison' fires)
-      reaction  - a Reaction (class-path deltas and/or a /function) applied on a firing turn
-    The command layer (repl) walks `step` each turn and fires proc+reaction (see _tick_effects)."""
+      proc      - proc signals to PULSE on a firing (step) turn (so a talent keyed on e.g. 'poison' fires)
+      reaction  - a Reaction (deltas and/or /function) applied on a firing (step) turn
+      clear_when - a Proc condition; when it matches the owner's proc-state the effect CLEARS
+                   (fires on_clear, same as removal). An effect may end by duration, by clear_when,
+                   by both (whichever first), or persist indefinitely (neither set).
+    LIFECYCLE HOOKS (each a Reaction — deltas and/or /function; pulse a signal via /proc in a function):
+      on_apply  - fires ONCE when the effect is gained
+      on_clear  - fires ONCE when the effect ends (duration hits 0, clear_when matches, or it is removed)
+    The command layer (repl) fires on_apply at add, proc+reaction on each step turn, on_clear at end."""
     type_id = "effect"
-    GENERIC_NBT = ["name", "duration", "step", "proc", "reaction", "description"]
+    GENERIC_NBT = ["name", "duration", "clear_when", "step", "on_apply", "proc", "reaction", "on_clear", "description"]
     NBT = []
     CORE = ("name",)
-    DEFAULTS = {"duration": None, "step": None, "proc": None, "reaction": None, "description": ""}
-    _STRUCTURED = {"name", "duration", "step", "proc", "reaction", "description"}
+    DEFAULTS = {"duration": None, "clear_when": None, "step": None, "on_apply": None, "proc": None,
+                "reaction": None, "on_clear": None, "description": ""}
+    _STRUCTURED = {"name", "duration", "clear_when", "step", "on_apply", "proc", "reaction", "on_clear", "description"}
 
-    def __init__(self, name="", duration=None, step=None, proc=None, reaction=None, description="", **nbt):
+    def __init__(self, name="", duration=None, step=None, proc=None, reaction=None, description="",
+                 on_apply=None, on_clear=None, clear_when=None, **nbt):
         self.name = name
         self.duration = duration
         self.step = _parse_token_list(step)
         self.proc = _parse_token_list(proc)
         self.reaction = Reaction.parse(reaction) if reaction is not None else None
+        self.on_apply = Reaction.parse(on_apply) if on_apply is not None else None
+        self.on_clear = Reaction.parse(on_clear) if on_clear is not None else None
+        self.clear_when = Proc.parse(clear_when) if clear_when is not None else None
         self.description = description
         self.nbt = dict(nbt)
         self._elapsed = 0     # turns this effect has been active (set by the turn ticker)
@@ -1019,10 +1024,12 @@ class Effect:
 
     @classmethod
     def from_nbt(cls, ident, nbt):
-        return _fill_generic_nbt(cls(name=ident, **nbt))
+        nbt = dict(nbt)
+        name = nbt.pop("name", ident)   # an explicit name: in the nbt wins (and avoids a kwarg collision)
+        return _fill_generic_nbt(cls(name=name, **nbt))
 
     def field_value(self, key):
-        if key in ("name", "duration", "step", "proc", "reaction", "description"):
+        if key in ("name", "duration", "clear_when", "step", "proc", "reaction", "on_apply", "on_clear", "description"):
             return getattr(self, key)
         return self.nbt.get(key)
 
@@ -1032,8 +1039,10 @@ class Effect:
                 self.step = _parse_token_list(val)
             elif key == "proc":
                 self.proc = _parse_token_list(val)
-            elif key == "reaction":
-                self.reaction = Reaction.parse(val) if val is not None else None
+            elif key == "clear_when":
+                self.clear_when = Proc.parse(val) if val is not None else None
+            elif key in ("reaction", "on_apply", "on_clear"):
+                setattr(self, key, Reaction.parse(val) if val is not None else None)
             elif key in ("name", "duration", "description"):
                 setattr(self, key, val)
             else:
@@ -1044,8 +1053,9 @@ class Effect:
         return _reset_fields(self, self.DEFAULTS, keys)
 
     def __repr__(self):
-        fields = {"duration": self.duration, "step": self.step, "proc": self.proc,
-                  "reaction": self.reaction, "description": self.description}
+        fields = {"duration": self.duration, "clear_when": self.clear_when, "step": self.step,
+                  "on_apply": self.on_apply, "proc": self.proc, "reaction": self.reaction,
+                  "on_clear": self.on_clear, "description": self.description}
         fields.update(self.nbt)
         return f"{self.name}{_nbt_string(fields)}"
 
@@ -1063,26 +1073,79 @@ def _as_turns(value):
             return None
 
 
+OBJECTIVE_TYPES = ("binary", "segment", "percent")
+
+
+def _as_objectives(value):
+    """Normalize a quest's progress-elements into a clean list of dicts. Each element is one of:
+      binary  -> a single check (current 0/1, goal 1)
+      segment -> a ticked bar like 'collect 7' (current 0..goal, goal = how many)
+      percent -> a 0..100 slider (current 0..100, goal 100)
+    Shape: {id, type, label, goal, current, proc:[tokens], done}. `proc` is a list of signal tokens
+    (e.g. ['remove_hex:true']) pulsed on the owner when THAT element first completes. `done` records
+    the last-known completion so the pulse fires only on the rising edge. Accepts a real list (the
+    dict serialization path); anything else -> []."""
+    if not isinstance(value, list):
+        return []
+    out = []
+    for i, raw in enumerate(value):
+        if not isinstance(raw, dict):
+            continue
+        t = str(raw.get("type", "binary")).lower()
+        if t not in OBJECTIVE_TYPES:
+            t = "binary"
+        goal = 100 if t == "percent" else (1 if t == "binary" else raw.get("goal", 3))
+        try:
+            goal = max(1, int(goal))
+        except (TypeError, ValueError):
+            goal = 1
+        try:
+            cur = float(raw.get("current", 0))
+        except (TypeError, ValueError):
+            cur = 0.0
+        if cur == int(cur):
+            cur = int(cur)
+        proc = raw.get("proc") or []
+        if isinstance(proc, str):
+            proc = [s.strip() for s in re.split(r"[,\s]+", proc.strip("[]{}")) if s.strip()]
+        elif isinstance(proc, (list, tuple)):
+            proc = [str(s) for s in proc]
+        else:
+            proc = []
+        out.append({"id": str(raw.get("id") or f"ob{i + 1}"), "type": t, "label": str(raw.get("label", "")),
+                    "goal": goal, "current": cur, "proc": proc, "done": bool(raw.get("done", False))})
+    return out
+
+
 class Quest:
     """A character-held quest:
       description  - free text
       reward       - a Reaction (class-path deltas AND/OR /function names) run on completion,
                      with @s = the quest owner. Same syntax as talent.reaction / ability.on_hit.
       expiration   - turns until it auto-fails (counts down on the owner's turns); None = never.
-    The command layer pulses 'quest_obtained' on creation, 'quest_complete' on /quest complete,
-    and 'quest_failed' on expiry (or /quest delete <quest> true)."""
+      expire_on    - an ABSOLUTE world turn it fails at (set from a calendar date by the command layer).
+      expire_when  - a Proc condition that fails it the moment the condition holds (like effect clear_when).
+      objectives   - a list of progress-elements (see _as_objectives). When ALL are complete the quest
+                     auto-completes (reward + 'quest_complete'); each element may also pulse its own procs.
+    A quest can use any one of the three expiries. The command layer pulses 'quest_obtained' on creation,
+    'quest_complete' on /quest complete, and 'quest_failed' on expiry (or /quest delete <quest> true)."""
     type_id = "quest"
-    GENERIC_NBT = ["name", "description", "reward", "expiration"]
+    GENERIC_NBT = ["name", "description", "reward", "expiration", "expire_on", "expire_when"]
     NBT = []
     CORE = ("name",)
-    DEFAULTS = {"description": "", "reward": None, "expiration": None}
-    _STRUCTURED = {"name", "description", "reward", "expiration"}
+    DEFAULTS = {"description": "", "reward": None, "expiration": None, "expire_on": None, "expire_when": None,
+                "objectives": []}
+    _STRUCTURED = {"name", "description", "reward", "expiration", "expire_on", "expire_when", "objectives"}
 
-    def __init__(self, name="", description="", reward=None, expiration=None, **nbt):
+    def __init__(self, name="", description="", reward=None, expiration=None, expire_on=None, expire_when=None,
+                 objectives=None, **nbt):
         self.name = name
         self.description = description
         self.reward = Reaction.parse(reward) if reward is not None else None
         self.expiration = _as_turns(expiration)
+        self.expire_on = expire_on                            # absolute turn OR a date string; resolved by the command layer
+        self.expire_when = Proc.parse(expire_when) if expire_when is not None else None
+        self.objectives = _as_objectives(objectives)
         self.nbt = dict(nbt)
 
     @classmethod
@@ -1092,7 +1155,7 @@ class Quest:
         return _fill_generic_nbt(cls(name=name, **nbt))
 
     def field_value(self, key):
-        if key in ("name", "description", "reward", "expiration"):
+        if key in ("name", "description", "reward", "expiration", "expire_on", "expire_when", "objectives"):
             return getattr(self, key)
         return self.nbt.get(key)
 
@@ -1102,7 +1165,81 @@ class Quest:
                 self.reward = Reaction.parse(val) if val is not None else None
             elif key == "expiration":
                 self.expiration = _as_turns(val)
+            elif key == "expire_on":
+                self.expire_on = val                          # raw (turn or date string); resolved at check time
+            elif key == "expire_when":
+                self.expire_when = Proc.parse(val) if val is not None else None
+            elif key == "objectives":
+                self.objectives = _as_objectives(val)
             elif key in ("name", "description"):
+                setattr(self, key, val)
+            else:
+                self.nbt[key] = val
+        return self
+
+    def reset(self, *keys):
+        result = _reset_fields(self, self.DEFAULTS, keys)
+        self.objectives = _as_objectives(self.objectives)  # keep it a list even after a reset to default
+        return result
+
+    def __repr__(self):
+        fields = {"description": self.description, "reward": self.reward, "expiration": self.expiration,
+                  "expire_on": self.expire_on, "expire_when": self.expire_when}
+        fields.update(self.nbt)
+        return f"{self.name}{_nbt_string(fields)}"
+
+
+HOOK_CONTEXTS = ("item", "ability", "talent", "effect", "quest", "")  # "" = applies to anything
+
+
+class Hook:
+    """A reusable, named conditional — the unified primitive that REPLACES the scattered proc/reaction/
+    on_apply/on_clear/on_equip/when_equipped/on_unequip/on_use/on_hit/reward/clear_when fields. Attach a
+    hook to an element by listing its name in that element's nbt `hooks:[...]`; when the matching EVENT
+    reaches the element's owner and the optional condition holds, the hook's reaction runs.
+      on        - the event it fires on: a lifecycle event ('equip','unequip','use','gain','lose','cast',
+                  'tick','quest.complete','turn.start','turn.end',…) OR a custom flag/signal name.
+      context   - the element kind it's meant for ('item'/'ability'/'talent'/'effect'/'quest') or '' = any.
+                  The UI only offers a hook to an element whose kind matches (or to '' hooks).
+      condition - an optional Proc (flag clauses) that gates the fire (reuses the proc language).
+      run       - a Reaction (class-path deltas and/or /function calls) — the effect (reuses reactions).
+    """
+    type_id = "hook"
+    GENERIC_NBT = ["name", "description", "on", "context", "condition", "run"]
+    NBT = []
+    CORE = ("name",)
+    DEFAULTS = {"description": "", "on": "", "context": "", "condition": None, "run": None}
+    _STRUCTURED = {"name", "description", "on", "context", "condition", "run"}
+
+    def __init__(self, name="", description="", on="", context="", condition=None, run=None, **nbt):
+        self.name = name
+        self.description = description
+        self.on = on
+        self.context = context if context in HOOK_CONTEXTS else ""
+        self.condition = Proc.parse(condition) if condition is not None else None
+        self.run = Reaction.parse(run) if run is not None else None
+        self.nbt = dict(nbt)
+
+    @classmethod
+    def from_nbt(cls, ident, nbt):
+        nbt = dict(nbt)
+        name = nbt.pop("name", ident)
+        return _fill_generic_nbt(cls(name=name, **nbt))
+
+    def field_value(self, key):
+        if key in self._STRUCTURED:
+            return getattr(self, key)
+        return self.nbt.get(key)
+
+    def modify(self, **fields):
+        for key, val in fields.items():
+            if key == "condition":
+                self.condition = Proc.parse(val) if val is not None else None
+            elif key == "run":
+                self.run = Reaction.parse(val) if val is not None else None
+            elif key == "context":
+                self.context = val if val in HOOK_CONTEXTS else ""
+            elif key in ("name", "description", "on"):
                 setattr(self, key, val)
             else:
                 self.nbt[key] = val
@@ -1112,7 +1249,8 @@ class Quest:
         return _reset_fields(self, self.DEFAULTS, keys)
 
     def __repr__(self):
-        fields = {"description": self.description, "reward": self.reward, "expiration": self.expiration}
+        fields = {"description": self.description, "on": self.on, "context": self.context,
+                  "condition": self.condition, "run": self.run}
         fields.update(self.nbt)
         return f"{self.name}{_nbt_string(fields)}"
 
@@ -1419,8 +1557,8 @@ class TalentSet:
     def get(self, name):
         return next((t for t in self.talent if t.name == name), None)
 
-    def by_proc(self, proc):
-        return [t for t in self.talent if t.proc == proc]
+    def by_proc(self, proc):   # legacy; talents no longer carry a proc field (it's a hook now)
+        return [t for t in self.talent if getattr(t, "proc", None) == proc]
 
 
 class AbilitySet:

@@ -1,135 +1,485 @@
 {
-  "plains": [
-    "           ",
-    "  ,  '  .  ",
-    " '  .  ,  '",
-    "  .  ,  '  ",
-    "           "
-  ],
-  "forest": [
-    "   ^    ^  ",
-    "  /^\\  /^\\ ",
-    " /^^^\\/^^^\\",
-    "   |    |  ",
-    "           "
-  ],
-  "taiga": [
-    " * ^ * ^ * ",
-    "  /^\\ /^\\  ",
-    " /^^^/^^^\\ ",
-    " *.|.*.|.* ",
-    "___________"
-  ],
-  "jungle": [
-    "  &@&@&@&  ",
-    " @&@&@&@&@ ",
-    " &@&%&%@&% ",
-    "  | || |   ",
-    "___________"
-  ],
-  "savanna": [
-    "   _____   ",
-    "  /     \\  ",
-    "    |||    ",
-    "  , |,| ,  ",
-    " ,,,|,|,,, "
-  ],
-  "desert": [
-    "   \\ | /   ",
-    "  - (o) -  ",
-    "   / | \\   ",
-    "  ~_~_~_~  ",
-    "~~~~~~~~~~~"
-  ],
-  "mesa": [
-    "  _______  ",
-    " |       | ",
-    "_|       |_",
-    "|         |",
-    "|_________|"
-  ],
-  "mountain": [
-    "     /\\    ",
-    "    /  \\   ",
-    "   /----\\  ",
-    "  /      \\ ",
-    " /________\\"
-  ],
-  "hills": [
-    "           ",
-    "   __  __  ",
-    "  /  \\/  \\ ",
-    " /        \\",
-    "___________"
-  ],
-  "volcano": [
-    "   ' :*: '  ",
-    "    /  \\   ",
-    "   / && \\  ",
-    "  /&&&&&&\\ ",
-    " /________\\"
-  ],
-  "cave": [
-    "vvvvvvvvvvv",
-    " v v v v v ",
-    "           ",
-    " ^ ^ ^ ^ ^ ",
-    "^^^^^^^^^^^"
-  ],
-  "tundra": [
-    "           ",
-    "  *   *  * ",
-    " *   *   * ",
-    "*  *   *  *",
-    "___________"
-  ],
-  "glacier": [
-    "___________",
-    "\\_\\_\\_\\_\\_\\",
-    " \\_\\_\\_\\_\\ ",
-    "\\_\\_\\_\\_\\_\\",
-    "___________"
-  ],
-  "swamp": [
-    " v   v   v ",
-    "~,~v~,~v~,~",
-    "~~,~~~,~~~~",
-    "_~_,~_~,_~_",
-    "~~~~~~~~~~~"
-  ],
-  "water": [
-    "~~~~~~~~~~~",
-    " ~~~ ~~~ ~ ",
-    "~~ ~~~ ~~~ ",
-    " ~~~ ~~ ~~~",
-    "~~ ~~~ ~~ ~"
-  ],
-  "lake": [
-    "  _______  ",
-    " /~~~~~~~\\ ",
-    "(~~~~~~~~~)",
-    " \\~~~~~~~/ ",
-    "  -------  "
-  ],
-  "river": [
-    ".. ~~~ ....",
-    "... ~~~ ...",
-    ".... ~~~ ..",
-    "... ~~~ ...",
-    ".. ~~~ ...."
-  ],
-  "beach": [
-    "() ~ ~ . . ",
-    "  ~ ~ . . .",
-    " ~ ~ . . . ",
-    "~ ~ . . . .",
-    ". . . . . ."
-  ],
-  "default": [
-    "           ",
-    "     ?     ",
-    "    ???    ",
-    "     ?     ",
-    "           "
-  ]
+  "plains": {
+    "label": "Plains",
+    "color": "#8db360",
+    "glyph": "\ud83c\udf3e",
+    "weight": 12,
+    "temperature": "temperate",
+    "moisture": "normal",
+    "affinity": [
+      "meadow",
+      "steppe",
+      "hills",
+      "woodland"
+    ],
+    "_family": "grassland",
+    "cluster": 3.0
+  },
+  "meadow": {
+    "label": "Meadow",
+    "color": "#a7c957",
+    "glyph": "\ud83c\udf3c",
+    "weight": 6,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "plains",
+      "woodland",
+      "river"
+    ],
+    "_family": "grassland",
+    "cluster": 2.0
+  },
+  "steppe": {
+    "label": "Steppe",
+    "color": "#c2b280",
+    "glyph": "\ud83c\udf3f",
+    "weight": 6,
+    "temperature": "temperate",
+    "moisture": "arid",
+    "affinity": [
+      "plains",
+      "badlands",
+      "hills"
+    ],
+    "_family": "grassland",
+    "cluster": 2.2
+  },
+  "savanna": {
+    "label": "Savanna",
+    "color": "#c9a14a",
+    "glyph": "\ud83e\udd92",
+    "weight": 6,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "steppe",
+      "desert",
+      "woodland"
+    ],
+    "_family": "grassland",
+    "cluster": 2.3
+  },
+  "woodland": {
+    "label": "Woodland",
+    "color": "#6b8e3d",
+    "glyph": "\ud83e\udeb5",
+    "weight": 7,
+    "temperature": "temperate",
+    "moisture": "normal",
+    "affinity": [
+      "plains",
+      "temperate_forest",
+      "hills"
+    ],
+    "_family": "forest",
+    "cluster": 2.2
+  },
+  "temperate_forest": {
+    "label": "Temperate Forest",
+    "color": "#4a7c44",
+    "glyph": "\ud83c\udf33",
+    "weight": 9,
+    "temperature": "temperate",
+    "moisture": "normal",
+    "affinity": [
+      "woodland",
+      "boreal_forest",
+      "hills",
+      "river"
+    ],
+    "_family": "forest",
+    "cluster": 2.8
+  },
+  "boreal_forest": {
+    "label": "Boreal Forest",
+    "color": "#2f5d4f",
+    "glyph": "\ud83c\udf32",
+    "weight": 7,
+    "temperature": "cold",
+    "moisture": "wet",
+    "affinity": [
+      "temperate_forest",
+      "tundra",
+      "mountain"
+    ],
+    "_family": "forest",
+    "cluster": 2.6
+  },
+  "rainforest": {
+    "label": "Rainforest",
+    "color": "#1f6b3b",
+    "glyph": "\ud83c\udf34",
+    "weight": 5,
+    "temperature": "hot",
+    "moisture": "wet",
+    "affinity": [
+      "jungle_river",
+      "swamp",
+      "savanna"
+    ],
+    "_family": "forest",
+    "cluster": 2.4
+  },
+  "tundra": {
+    "label": "Tundra",
+    "color": "#b8c4c2",
+    "glyph": "\ud83e\udd8c",
+    "weight": 6,
+    "temperature": "cold",
+    "moisture": "normal",
+    "affinity": [
+      "boreal_forest",
+      "snowfield",
+      "mountain"
+    ],
+    "_family": "cold",
+    "cluster": 2.6
+  },
+  "snowfield": {
+    "label": "Snowfield",
+    "color": "#e8eef2",
+    "glyph": "\u2744\ufe0f",
+    "weight": 4,
+    "temperature": "cold",
+    "moisture": "wet",
+    "affinity": [
+      "tundra",
+      "glacier",
+      "mountain"
+    ],
+    "_family": "cold",
+    "cluster": 2.2
+  },
+  "glacier": {
+    "label": "Glacier",
+    "color": "#bcd6e6",
+    "glyph": "\ud83e\uddca",
+    "weight": 3,
+    "temperature": "cold",
+    "moisture": "normal",
+    "affinity": [
+      "snowfield",
+      "mountain",
+      "ocean"
+    ],
+    "_family": "cold",
+    "cluster": 2.0
+  },
+  "alpine": {
+    "label": "Alpine",
+    "color": "#8fa3a8",
+    "glyph": "\ud83c\udfd4\ufe0f",
+    "weight": 4,
+    "temperature": "cold",
+    "moisture": "normal",
+    "affinity": [
+      "mountain",
+      "tundra",
+      "hills"
+    ],
+    "_family": "cold",
+    "cluster": 1.6
+  },
+  "hills": {
+    "label": "Hills",
+    "color": "#9caf6b",
+    "glyph": "\u26f0\ufe0f",
+    "weight": 8,
+    "temperature": "temperate",
+    "moisture": "normal",
+    "affinity": [
+      "plains",
+      "mountain",
+      "woodland"
+    ],
+    "_family": "highland",
+    "cluster": 2.8
+  },
+  "mountain": {
+    "label": "Mountain",
+    "color": "#8a8d91",
+    "glyph": "\ud83d\uddfb",
+    "weight": 7,
+    "temperature": "cold",
+    "moisture": "normal",
+    "affinity": [
+      "hills",
+      "alpine",
+      "boreal_forest",
+      "volcano"
+    ],
+    "_family": "highland",
+    "cluster": 2.8
+  },
+  "volcano": {
+    "label": "Volcano",
+    "color": "#6e3b3b",
+    "glyph": "\ud83c\udf0b",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "mountain",
+      "ashland"
+    ],
+    "_family": "highland",
+    "cluster": 0.6
+  },
+  "ashland": {
+    "label": "Ashland",
+    "color": "#5a5145",
+    "glyph": "\ud83e\udea8",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "volcano",
+      "wasteland",
+      "badlands"
+    ],
+    "_family": "highland",
+    "cluster": 1.0
+  },
+  "desert": {
+    "label": "Desert",
+    "color": "#e3c179",
+    "glyph": "\ud83c\udfdc\ufe0f",
+    "weight": 7,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "dunes",
+      "badlands",
+      "savanna",
+      "mesa"
+    ],
+    "_family": "arid",
+    "cluster": 3.2
+  },
+  "dunes": {
+    "label": "Dunes",
+    "color": "#d9b066",
+    "glyph": "\ud83d\udc2a",
+    "weight": 4,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "desert",
+      "oasis"
+    ],
+    "_family": "arid",
+    "cluster": 2.2
+  },
+  "mesa": {
+    "label": "Mesa",
+    "color": "#b5651d",
+    "glyph": "\ud83d\udfe7",
+    "weight": 3,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "desert",
+      "badlands",
+      "ashland"
+    ],
+    "_family": "arid",
+    "cluster": 1.6
+  },
+  "badlands": {
+    "label": "Badlands",
+    "color": "#b07a4a",
+    "glyph": "\ud83c\udf35",
+    "weight": 4,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "desert",
+      "mesa",
+      "steppe"
+    ],
+    "_family": "arid",
+    "cluster": 1.8
+  },
+  "oasis": {
+    "label": "Oasis",
+    "color": "#5fae7a",
+    "glyph": "\ud83c\udfdd\ufe0f",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "normal",
+    "affinity": [
+      "desert",
+      "dunes"
+    ],
+    "_family": "arid",
+    "cluster": 0.5
+  },
+  "swamp": {
+    "label": "Swamp",
+    "color": "#5c6b4a",
+    "glyph": "\ud83d\udc38",
+    "weight": 5,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "marsh",
+      "rainforest",
+      "river"
+    ],
+    "_family": "wetland",
+    "cluster": 2.0
+  },
+  "marsh": {
+    "label": "Marsh",
+    "color": "#7a8b5a",
+    "glyph": "\ud83e\udeb7",
+    "weight": 4,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "swamp",
+      "river",
+      "coast",
+      "lake"
+    ],
+    "_family": "wetland",
+    "cluster": 1.8
+  },
+  "ocean": {
+    "label": "Ocean",
+    "color": "#2e5e8c",
+    "glyph": "\ud83c\udf0a",
+    "weight": 10,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "ocean",
+      "reef",
+      "coast",
+      "glacier"
+    ],
+    "_family": "water",
+    "cluster": 5.0
+  },
+  "reef": {
+    "label": "Reef",
+    "color": "#2fa3a3",
+    "glyph": "\ud83d\udc20",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "wet",
+    "affinity": [
+      "ocean",
+      "coast"
+    ],
+    "_family": "water",
+    "cluster": 1.0
+  },
+  "coast": {
+    "label": "Coast",
+    "color": "#d8c98a",
+    "glyph": "\ud83c\udfd6\ufe0f",
+    "weight": 5,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "ocean",
+      "plains",
+      "marsh",
+      "river"
+    ],
+    "_family": "water",
+    "cluster": 1.4
+  },
+  "lake": {
+    "label": "Lake",
+    "color": "#3f7fae",
+    "glyph": "\ud83d\udca7",
+    "weight": 4,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "river",
+      "marsh",
+      "meadow",
+      "plains"
+    ],
+    "_family": "water",
+    "cluster": 1.4
+  },
+  "river": {
+    "label": "River",
+    "color": "#4a90c2",
+    "glyph": "\ud83c\udfde\ufe0f",
+    "weight": 5,
+    "temperature": "temperate",
+    "moisture": "wet",
+    "affinity": [
+      "lake",
+      "coast",
+      "plains",
+      "temperate_forest"
+    ],
+    "_family": "water",
+    "cluster": 1.0
+  },
+  "jungle_river": {
+    "label": "Jungle River",
+    "color": "#2f8f6b",
+    "glyph": "\ud83d\udef6",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "wet",
+    "affinity": [
+      "rainforest",
+      "swamp"
+    ],
+    "_family": "water",
+    "cluster": 1.0
+  },
+  "cave": {
+    "label": "Cave",
+    "color": "#3a3a40",
+    "glyph": "\ud83e\udd87",
+    "weight": 3,
+    "temperature": "temperate",
+    "moisture": "normal",
+    "affinity": [
+      "mountain",
+      "hills",
+      "cavern"
+    ],
+    "_family": "underground",
+    "cluster": 1.4
+  },
+  "cavern": {
+    "label": "Crystal Cavern",
+    "color": "#2c2c33",
+    "glyph": "\ud83d\udc8e",
+    "weight": 1,
+    "temperature": "cold",
+    "moisture": "normal",
+    "affinity": [
+      "cave",
+      "mountain"
+    ],
+    "_family": "underground",
+    "cluster": 0.5
+  },
+  "wasteland": {
+    "label": "Wasteland",
+    "color": "#8a7f6b",
+    "glyph": "\u2620\ufe0f",
+    "weight": 2,
+    "temperature": "hot",
+    "moisture": "arid",
+    "affinity": [
+      "ashland",
+      "badlands",
+      "mesa"
+    ],
+    "_family": "ruined",
+    "cluster": 1.6
+  }
 }

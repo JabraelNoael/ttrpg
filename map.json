@@ -1,130 +1,69 @@
 {
   "cells": {
-    "0,0": {
-      "biome": "plains",
-      "name": ""
-    },
-    "1,0": {
-      "biome": "plains",
-      "name": ""
-    },
     "0,1": {
-      "biome": "forest",
-      "name": ""
-    },
-    "1,1": {
-      "biome": "forest",
-      "name": ""
-    },
-    "2,0": {
-      "biome": "forest",
-      "name": ""
-    },
-    "2,1": {
-      "biome": "jungle",
-      "name": ""
-    },
-    "2,2": {
-      "biome": "jungle",
-      "name": ""
-    },
-    "3,0": {
-      "biome": "forest",
-      "name": ""
-    },
-    "3,1": {
-      "biome": "forest",
-      "name": ""
-    },
-    "3,2": {
-      "biome": "jungle",
-      "name": ""
-    },
-    "3,3": {
-      "biome": "taiga",
-      "name": ""
-    },
-    "3,4": {
-      "biome": "taiga",
-      "name": ""
-    },
-    "4,4": {
-      "biome": "savannah",
-      "name": ""
-    },
-    "5,5": {
-      "biome": "desert",
-      "name": ""
-    },
-    "4,5": {
       "biome": "mesa",
       "name": ""
     },
-    "5,4": {
-      "biome": "hills",
+    "2,1": {
+      "biome": "woodland",
       "name": ""
     },
-    "1,5": {
-      "biome": "mountain",
+    "2,0": {
+      "biome": "marsh",
       "name": ""
     },
-    "2,5": {
-      "biome": "volcano",
+    "3,2": {
+      "biome": "woodland",
       "name": ""
     },
-    "3,5": {
-      "biome": "cave",
+    "3,0": {
+      "biome": "woodland",
       "name": ""
     },
-    "5,1": {
-      "biome": "tundra",
+    "3,1": {
+      "biome": "woodland",
       "name": ""
     },
-    "5,2": {
-      "biome": "glacier",
+    "0,2": {
+      "biome": "mesa",
       "name": ""
     },
-    "5,3": {
-      "biome": "water",
+    "2,2": {
+      "biome": "woodland",
       "name": ""
     },
-    "6,0": {
-      "biome": "swamp",
+    "4,0": {
+      "biome": "woodland",
       "name": ""
     },
-    "6,1": {
-      "biome": "swamp",
+    "0,0": {
+      "biome": "desert",
       "name": ""
     },
-    "6,2": {
-      "biome": "lake",
+    "1,2": {
+      "biome": "mesa",
       "name": ""
     },
-    "6,3": {
-      "biome": "river",
+    "1,1": {
+      "biome": "mesa",
       "name": ""
     },
-    "6,4": {
-      "biome": "beach",
+    "1,0": {
+      "biome": "desert",
       "name": ""
     },
-    "6,5": {
-      "biome": "default",
+    "4,2": {
+      "biome": "woodland",
+      "name": ""
+    },
+    "4,1": {
+      "biome": "woodland",
       "name": ""
     }
   },
   "pos": [
-    0,
-    0
+    2,
+    1
   ],
-  "structures": [
-    {
-      "name": "tower",
-      "description": "",
-      "pos": [
-        1,
-        1
-      ]
-    }
-  ]
+  "structures": []
 }

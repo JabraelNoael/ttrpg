@@ -1,0 +1,4847 @@
+{
+  "Human": {
+    "_default": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 100,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 1,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Ser-vow": {
+    "Cons": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 90,
+        "vitality": 2,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "neckwear": 6,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 4,
+          "tailwear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldrons": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlets": 2,
+          "tailplating": 1
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "tail": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1
+        }
+      }
+    },
+    "Vens": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 90,
+        "vitality": 2,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "neckwear": 6,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 4,
+          "tailwear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldrons": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlets": 2,
+          "tailplating": 1
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "tail": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1
+        }
+      }
+    }
+  },
+  "Wu'kki": {
+    "Monkey": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.2,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_foot": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_foot": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "tail": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Baboon": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.2,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_foot": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_foot": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "tail": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Gorilla": {
+      "stats": {
+        "max_health": 75,
+        "max_mana": 80,
+        "vitality": 0,
+        "initiative": 2.1,
+        "speed": 1,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0.5,
+        "willpower": 0,
+        "tenacity": 2,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_foot": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_foot": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Durmaroc": {
+    "Elephant": {
+      "stats": {
+        "max_health": 90,
+        "max_mana": 80,
+        "vitality": 0,
+        "initiative": 1.5,
+        "speed": 0.7,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 2,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "tuskwear": 2,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "trunkplating": 1,
+          "tuskplating": 2,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "trunk": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Hippo": {
+      "stats": {
+        "max_health": 95,
+        "max_mana": 75,
+        "vitality": 0,
+        "initiative": 1.5,
+        "speed": 0.7,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 2,
+        "tenacity": 2.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "tuskwear": 2,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "tuskplating": 2,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Rhino": {
+      "stats": {
+        "max_health": 90,
+        "max_mana": 75,
+        "vitality": 0,
+        "initiative": 1.5,
+        "speed": 0.7,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "tuskwear": 2,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "hornplating": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Tapir": {
+      "stats": {
+        "max_health": 80,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 1.7,
+        "speed": 0.8,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "tuskwear": 2,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "trunkplating": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "trunk": {
+            "count": 1,
+            "weight": "light"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Taurim": {
+    "Cow": {
+      "stats": {
+        "max_health": 80,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 1,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "hornwear": 2,
+          "tailwear": 1,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "hornplating": 2,
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Bull": {
+      "stats": {
+        "max_health": 85,
+        "max_mana": 80,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 1,
+        "attack": 7,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "hornwear": 2,
+          "tailwear": 1,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "hornplating": 2,
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Ram": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "hornwear": 2,
+          "tailwear": 1,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "hornplating": 2,
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "\u016anedine": {
+    "Clown Fish": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 105,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Shark": {
+      "stats": {
+        "max_health": 75,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 6,
+        "critical_scale": 1.7,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "finplating": 6,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "tailplating": 1,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Octopus": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 110,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 2,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 10,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "arm": {
+            "count": 8,
+            "weight": "light"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Turtle": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 0.8,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 1.5,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "shellplating": 1,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Av\u00e4orian": {
+    "Cockatiel": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 100,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.5,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "talonring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "feetplating": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_talon": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_talon": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Hawk": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2.7,
+        "speed": 1.5,
+        "attack": 3,
+        "critical_scale": 1.8,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "talonring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "feetplating": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_talon": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_talon": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Crow": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 105,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.5,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "talonring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "feetplating": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_talon": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_talon": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Owl": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 110,
+        "vitality": 0,
+        "initiative": 2.5,
+        "speed": 1.5,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "talonring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "feetplating": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "left_talon": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "right_talon": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Na'zu": {
+    "Mantis": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.8,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 8,
+          "ring": 4,
+          "belt": 1,
+          "cerci": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 4,
+          "couter": 4,
+          "vambrace": 4,
+          "cerciplating": 1,
+          "gauntlet": 4,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "hand": {
+            "count": 4,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Moth": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 110,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 6,
+          "ring": 24,
+          "belt": 1,
+          "anklewear": 2
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 6,
+          "couter": 6,
+          "vambrace": 6,
+          "gauntlet": 6,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "hand": {
+            "count": 6,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Beetle": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 0.9,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 6,
+          "ring": 12,
+          "belt": 1,
+          "anklewear": 2
+        },
+        "armor": {
+          "hornplating": 3,
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 4,
+          "couter": 4,
+          "vambrace": 4,
+          "gauntlet": 4,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "hand": {
+            "count": 2,
+            "weight": "generic"
+          },
+          "weak_hand": {
+            "count": 2,
+            "weight": "light"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Ant": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 8,
+          "ring": 12,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 4,
+          "couter": 4,
+          "vambrace": 4,
+          "gauntlet": 4,
+          "cuisse": 2,
+          "gasterplating": 1,
+          "poleyn": 2,
+          "greave": 2,
+          "sabaton": 2
+        },
+        "wield": {
+          "hand": {
+            "count": 4,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Caeung": {
+    "Frog": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Toad": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 0.9,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Salamander": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 8,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Axolotl": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 95,
+        "vitality": 1,
+        "initiative": 2,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Felanon": {
+    "Cat": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.1,
+        "attack": 5.5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Lion": {
+      "stats": {
+        "max_health": 75,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 6,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Scutakari": {
+    "Lizard": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0.5,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Gecko": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0.5,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Tortoise": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 1.9,
+        "speed": 0.8,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0.5,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "scuteplating": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Chameleon": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 100,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0.5,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "tailplating": 1,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Gritin": {
+    "Fox": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Wolf": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Coyote": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.4,
+        "speed": 1.1,
+        "attack": 4.5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Tekadaur": {
+    "Rat": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.2,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Porcupine": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 0.9,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "tailwear": 2,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Capybara": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Arcton": {
+    "Polar": {
+      "stats": {
+        "max_health": 95,
+        "max_mana": 80,
+        "vitality": 0,
+        "initiative": 1.7,
+        "speed": 0.8,
+        "attack": 7,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Kodiak": {
+      "stats": {
+        "max_health": 100,
+        "max_mana": 75,
+        "vitality": 0,
+        "initiative": 1.7,
+        "speed": 0.9,
+        "attack": 7,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Panada": {
+      "stats": {
+        "max_health": 85,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 0.9,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 1,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Lepkin": {
+    "Pika": {
+      "stats": {
+        "max_health": 40,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.5,
+        "speed": 1.6,
+        "attack": 2.5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Hare": {
+      "stats": {
+        "max_health": 48,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.5,
+        "speed": 1.6,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0.5
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Rabbit": {
+      "stats": {
+        "max_health": 48,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.5,
+        "speed": 1.6,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0.5
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Dwarf": {
+    "_default": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 0.9,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1.5,
+        "defense": 1.5,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Orc": {
+    "_default": {
+      "stats": {
+        "max_health": 85,
+        "max_mana": 85,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 7,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Goblin": {
+    "_default": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 100,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.2,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Tonador": {
+    "Zerki": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 1,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Lung-Hai": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 130,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 1,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Hobgoblin": {
+    "_default": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 90,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 1,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Gnome": {
+    "Hill": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 1.85,
+        "speed": 0.85,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1.5,
+        "defense": 1.5,
+        "willpower": 1,
+        "tenacity": 1,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Valley": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 1.85,
+        "speed": 0.85,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1.5,
+        "defense": 1.5,
+        "willpower": 1,
+        "tenacity": 1,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Elf": {
+    "Eldarin": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 120,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Drow": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 115,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Satyr": {
+    "_default": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 1.5,
+        "defense": 1.5,
+        "willpower": 1,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Detun": {
+    "Pride": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 102,
+        "vitality": 0,
+        "initiative": 3,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Greed": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 102,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0.5
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Wrath": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 102,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.7,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Envy": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 102,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1.1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Lust": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 102,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Gluttony": {
+      "stats": {
+        "max_health": 65,
+        "max_mana": 104.5,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Sloth": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 102,
+        "vitality": 1,
+        "initiative": 1.8,
+        "speed": 0.8,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Heiligiest": {
+    "Ghastly": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 125,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Radiant": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 125,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Necrotic": {
+      "stats": {
+        "max_health": 45,
+        "max_mana": 125,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Ennent": {
+    "Air": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 145,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.2,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 2,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Water": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 145,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 2,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Earth": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 140,
+        "vitality": 0,
+        "initiative": 1.8,
+        "speed": 0.9,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 2,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Fire": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 140,
+        "vitality": 0,
+        "initiative": 2.2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.7,
+        "reach": 1,
+        "magic": 2,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Klashque": {
+    "_default": {
+      "stats": {
+        "max_health": 60,
+        "max_mana": 110,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 4,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Oth\u00e9con": {
+    "_default": {
+      "stats": {
+        "max_health": 55,
+        "max_mana": 110,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1.5,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 2,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Nimoo": {
+    "_default": {
+      "stats": {
+        "max_health": 70,
+        "max_mana": 95,
+        "vitality": 0,
+        "initiative": 2,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Fun-klin": {
+    "_default": {
+      "stats": {
+        "max_health": 50,
+        "max_mana": 95,
+        "vitality": 2,
+        "initiative": 2.1,
+        "speed": 1,
+        "attack": 3,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 1,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 2,
+          "couter": 2,
+          "vambrace": 2,
+          "gauntlet": 2,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  },
+  "Warforged": {
+    "Brass": {
+      "stats": {
+        "max_health": 80,
+        "max_mana": 60,
+        "vitality": 0,
+        "initiative": 2.1,
+        "speed": 1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 0,
+        "armor_class": 0,
+        "defense": 1,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 4,
+          "couter": 4,
+          "vambrace": 4,
+          "gauntlet": 4,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    },
+    "Tin": {
+      "stats": {
+        "max_health": 75,
+        "max_mana": 60,
+        "vitality": 0,
+        "initiative": 2.3,
+        "speed": 1.1,
+        "attack": 5,
+        "critical_scale": 1.6,
+        "reach": 1,
+        "magic": 0,
+        "armor_class": 0,
+        "defense": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 0
+      },
+      "equip_slots": {
+        "accessories": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "neckwear": 4,
+          "mask": 1,
+          "wristwear": 4,
+          "ring": 10,
+          "belt": 1,
+          "anklewear": 4
+        },
+        "armor": {
+          "helmet": 1,
+          "gorget": 1,
+          "pauldron": 2,
+          "chestplate": 1,
+          "rerebrace": 4,
+          "couter": 4,
+          "vambrace": 4,
+          "gauntlet": 4,
+          "cuisse": 2,
+          "poleyn": 2,
+          "greave": 2
+        },
+        "wield": {
+          "main": {
+            "count": 1,
+            "weight": "generic"
+          },
+          "off": {
+            "count": 1,
+            "weight": "generic"
+          }
+        },
+        "clothing": {
+          "tunic": 1,
+          "pants": 1,
+          "sock": 2
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,353 @@
+<!doctype html>
+<!-- HOOK LAB v5 — Hook Lab + Function Lab in one place (Graph View stubbed). Mock data; no backend.
+   Hook Lab: context bar → triggers/events/logic; events grow a click-to-add `+ in …` extender; a
+   draggable `not` negates whatever part you drop it on; ✕ deletes any block/event/clause/script.
+   Function Lab: the file-tree of function paths (`:`/`/` nesting) + a numbered-line editor, styled
+   to match. Hooks `run function <name>` link the two. (Autofill/backend wiring comes when this lifts
+   into the main UI.) -->
+<html><head><meta charset="utf-8"><title>Labs</title>
+<style>
+  *{box-sizing:border-box;} html,body{height:100%;}
+  :root{ --bg:#14161a; --panel:#1b1e24; --panel2:#21252c; --line:#2c313a; --ink:#d7dae0; --gold:#f5c542;
+    --trigger:#c8922e; --event:#2f8f8f; --ctx:#3f6ea5; --logic:#7a4fb0; --not:#c0504a; --run:#4f8a52; }
+  body{ margin:0; font:13px/1.4 ui-monospace,Menlo,Consolas,monospace; background:var(--bg); color:var(--ink); }
+  header{ display:flex; align-items:center; gap:14px; padding:8px 16px; background:#1d2026; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1{ font-size:15px; margin:0; color:#8ab4f8; font-weight:800; } .hint{ font-size:11px; color:#8a93a2; }
+  .labtabs{ display:flex; gap:6px; } .labtabs button{ padding:5px 13px; cursor:pointer; background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:8px; font:inherit; }
+  .labtabs button.on{ border-color:#6a8fd8; color:#fff; background:#243047; }
+  .ctxbar{ display:flex; gap:6px; align-items:center; } .ctxbar .lbl{ font-size:11px; color:#8a93a2; }
+  .ctxchip{ font-size:12px; padding:4px 11px; border-radius:13px; border:1px solid var(--line); cursor:pointer; color:#aeb6c2; user-select:none; }
+  .ctxchip.on{ background:var(--event); border-color:var(--event); color:#08201f; font-weight:700; }
+  main{ display:flex; height:calc(100vh - 86px); } .view{ display:none; width:100%; } .view.on{ display:flex; }
+  /* ---------- palette (Hook Lab) ---------- */
+  .palette{ width:230px; flex:none; border-right:1px solid var(--line); overflow:auto; padding:10px; }
+  .pcat{ font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:#8a93a2; margin:13px 0 5px; } .pcat:first-child{margin-top:0;}
+  .pblock{ border-radius:7px; padding:6px 9px; margin:5px 0; color:#fff; cursor:pointer; font-weight:600; border:1px solid rgba(0,0,0,.25); }
+  .pblock:hover{ filter:brightness(1.12); } .pblock .sub{ opacity:.65; font-weight:400; }
+  .pblock.trigger{background:var(--trigger);} .pblock.logic{background:var(--logic);} .pblock.run{background:var(--run);}
+  .pblock.event{background:var(--event); cursor:grab; display:block;} .pblock.event .tagr{ float:right; opacity:.7; font-weight:400; font-size:11px; }
+  .pblock.notb{background:var(--logic); cursor:grab; display:inline-block; border-radius:13px;} .psub{ font-size:11px; color:#8a93a2; }
+  /* ---------- canvas / scripts ---------- */
+  .canvas{ flex:1; overflow:auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; align-items:flex-start; }
+  .script{ background:#16181d; border:1px solid var(--line); border-radius:10px; padding:8px; min-width:340px; max-width:100%; }
+  .script.active{ border-color:#6a8fd8; box-shadow:0 0 0 1px #6a8fd8 inset; }
+  .shead{ display:flex; gap:8px; align-items:center; font-size:11px; color:#8a93a2; margin:0 2px 6px; } .shead .x{ cursor:pointer; opacity:.6; } .shead .x:hover{opacity:1;}
+  .hookname{ margin-left:auto; width:140px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:3px 7px; font:inherit; font-size:12px; }
+  .savehook{ background:#243a26; color:#a7c957; border:1px solid #4f8a52; border-radius:6px; padding:3px 9px; cursor:pointer; font:inherit; font-size:11px; } .savehook:hover{ filter:brightness(1.15); }
+  .stack{ display:flex; flex-direction:column; }
+  .blk{ display:flex; align-items:center; flex-wrap:wrap; gap:6px; color:#fff; padding:7px 9px; border:1px solid rgba(0,0,0,.3); border-bottom:none; }
+  .blk:first-child{ border-radius:9px 9px 0 0; } .blk:last-of-type{ border-bottom:1px solid rgba(0,0,0,.3); border-radius:0 0 9px 9px; } .blk.solo{ border-radius:9px; }
+  .blk.trigger{background:var(--trigger);} .blk.logic{background:var(--logic);} .blk.run{background:var(--run);}
+  .kw{ font-weight:700; white-space:nowrap; } .x{ margin-left:auto; cursor:pointer; opacity:.6; font-weight:700; padding-left:6px; } .x:hover{opacity:1;}
+  .blk input,.blk select{ background:rgba(0,0,0,.30); color:#fff; border:1px solid rgba(255,255,255,.22); border-radius:5px; padding:2px 6px; font:inherit; font-size:12px; }
+  .blk input.sel{width:118px;} .blk input.op{width:120px;} .blk input.path{width:108px;} .blk input.num{width:44px;text-align:center;} .blk select.cmp{width:54px;}
+  .evslot{ display:inline-flex; align-items:center; gap:5px; background:var(--event); border-radius:6px; padding:2px 4px 2px 8px; font-weight:700; }
+  .evslot.empty{ background:rgba(0,0,0,.25); border:1px dashed rgba(255,255,255,.4); color:#cfd; font-weight:400; padding:3px 9px; }
+  .evslot.dropok,.nottarget.dropok{ outline:2px solid #fff; border-radius:6px; }
+  .evx{ cursor:pointer; opacity:.6; font-weight:700; } .evx:hover{opacity:1;}
+  .extslot{ display:inline-flex; align-items:center; gap:4px; background:var(--ctx); border-radius:6px; padding:2px 6px; }
+  .negtag{ background:var(--not); border-radius:4px; padding:0 5px; font-weight:700; font-size:11px; cursor:pointer; }
+  .addext{ font-size:12px; color:#cfe; border:1px dashed rgba(255,255,255,.45); border-radius:6px; padding:2px 9px; cursor:pointer; } .addext:hover{ background:rgba(255,255,255,.08); }
+  .preview{ font-size:11px; color:#7f93b5; margin-top:6px; padding:5px 2px 0; border-top:1px solid var(--line); } .preview b{ color:#aeb6c2; font-weight:600; }
+  .newscript{ border:1px dashed #4c6286; border-radius:9px; padding:9px 14px; color:var(--gold); cursor:pointer; } .emptyscript{ color:#6b7280; font-size:12px; padding:6px; }
+  /* ---------- Function Lab ---------- */
+  .fnlist{ width:300px; flex:none; border-right:1px solid var(--line); overflow:auto; padding:10px; }
+  .fnrow{ display:flex; align-items:center; gap:6px; padding:2px 0; }
+  .fnseg{ cursor:pointer; padding:2px 6px; border-radius:5px; } .fnseg:hover{ background:#21252c; } .fnseg.sel{ background:#243047; color:#fff; }
+  .fnseg.folder{ color:#8a93a2; cursor:default; } .fndelim{ color:#566; opacity:.7; margin-right:1px; }
+  .fnguide{ color:#3a4150; white-space:pre; } .fnbtns{ margin-left:auto; display:flex; gap:3px; }
+  .fnbtn{ width:22px; height:22px; border-radius:5px; border:1px solid var(--line); background:var(--panel2); color:var(--ink); cursor:pointer; font-size:11px; padding:0; }
+  .fnbtn.del{ color:#e07a7a; } .fnbtn.run{ color:var(--gold); } .fnbtn:hover{ border-color:#4c6286; }
+  .fneditor{ flex:1; overflow:auto; padding:16px 20px; } .fneditor .erow{ display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+  .fneditor input.fnpath{ flex:1; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
+  .fndoc{ display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#0f1115; }
+  .fngutter{ flex:none; padding:8px 0; background:#15181d; color:#5b6473; text-align:right; user-select:none; }
+  .fnln{ padding:0 9px; line-height:1.5; } .fnbody{ flex:1; border:none; background:transparent; color:var(--ink); padding:8px 10px; font:inherit; line-height:1.5; resize:vertical; min-height:200px; outline:none; }
+  .fn-ac{ position:absolute; display:none; z-index:20; background:#1b1e24; border:1px solid #3a4f73; border-radius:6px; max-height:200px; overflow:auto; min-width:160px; box-shadow:0 4px 14px rgba(0,0,0,.5); }
+  .fn-ac div{ padding:3px 10px; cursor:pointer; white-space:nowrap; } .fn-ac div:hover, .fn-ac div.sel{ background:#243047; color:#fff; }
+  .go{ background:#243047; color:#fff; border:1px solid #6a8fd8; border-radius:7px; padding:6px 14px; cursor:pointer; font:inherit; }
+  .placeholder{ flex:1; display:flex; align-items:center; justify-content:center; color:#6b7280; }
+</style></head>
+<body>
+<header>
+  <h1>🧪 Labs</h1>
+  <div class="labtabs"><button id="t-hook" class="on" onclick="setView('hook')">🪝 Hook Lab</button>
+    <button id="t-func" onclick="setView('func')">ƒ Function Lab</button>
+    <button id="t-graph" onclick="setView('graph')">🕸 Graph View</button></div>
+  <div class="ctxbar" id="ctxwrap"><span class="lbl">context:</span><span id="ctxbar"></span></div>
+</header>
+<main>
+  <div class="view on" id="view-hook"><div class="palette" id="palette"></div><div class="canvas" id="canvas"></div></div>
+  <div class="view" id="view-func"><div class="fnlist" id="fnlist"></div><div class="fneditor" id="fneditor"></div></div>
+  <div class="view" id="view-graph"><div class="placeholder">Graph View — the web of which hooks fire which · which functions are hooked where. (later)</div></div>
+</main>
+<datalist id="dl-sel"></datalist><datalist id="dl-path"></datalist><datalist id="dl-func"></datalist>
+<script>
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+let VIEW="hook";
+function setView(v){ VIEW=v; ["hook","func","graph"].forEach(k=>{ document.getElementById("t-"+k).classList.toggle("on",k===v); document.getElementById("view-"+k).classList.toggle("on",k===v); });
+  document.getElementById("ctxwrap").style.visibility = v==="hook"?"visible":"hidden";
+  // render Function Lab ONCE (first entry); re-entry preserves the editor (don't wipe unsaved typing)
+  if(v==="func" && !FN_RENDERED){ FN_RENDERED=true; loadFuncs().then(()=>{ if(!FN_SEL||!FUNCS[FN_SEL]) FN_SEL=Object.keys(FUNCS)[0]||null; renderFnLab(); }); } }
+// same-origin: when this page is the iframe inside ui.py, /state and /cmd are the REAL backend.
+async function post(line){ try{
+  // when embedded as the Lab iframe, run THROUGH the main console so it executes + shows in the terminal
+  if (window.parent && window.parent !== window && window.parent.runOne) { await window.parent.runOne(line); return; }
+  await fetch("/cmd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({line})});
+}catch(e){} }
+async function loadFuncs(){ try{ const r=await fetch("/state"); if(r.ok){ const st=await r.json(); const f=st.functions||{}; FUNCS={}; Object.keys(f).forEach(k=>FUNCS[k]=Array.isArray(f[k])?f[k].slice():[]); } }catch(e){/* standalone: keep mock */} }
+
+/* ======================= HOOK LAB ======================= */
+const CONTEXTS=["item","ability","talent","quest","effect","flag"];
+const CTX_EVENTS={ item:["equipped","in_inventory","used","gained","lost"], ability:["cast","gained","lost","ready"],
+  talent:["gained","lost"], quest:["obtained","progressed","completed","failed"], effect:["gained","ticked","expired"], flag:["set","cleared"] };
+let SLOTS=["head","chest","main_hand","off_hand","ring","neck","legs","feet"];   // fallback; replaced from /state
+const EVENT_EXT={ equipped:[{conn:"in",vals:SLOTS}], set:[{conn:"is",vals:["true","false"]}] };
+async function loadSlots(){ try{ const st=await (await fetch("/state")).json(); const s=new Set();
+    Object.values(st.players||{}).forEach(p=>{ const es=(p.nbt&&p.nbt.equip_slots)||{}; Object.keys(es).forEach(k=>s.add(k)); });
+    if(s.size){ SLOTS=[...s].sort(); EVENT_EXT.equipped[0].vals=SLOTS; if(VIEW==="hook")render(); } }catch(e){/* standalone */} }
+const SELS=["@s","@o","@p","@a","@!a","@m","@"]; const PATHS=["@s.stat.health","@s.stat.mana","@o.stat.attack","@s.stat.defense","d20","10","0"];
+const FUNCNAMES=["bless","don_helm","ignite","rally","counter"]; const CMPS=[">","<",">=","<=","=","!="];
+[["dl-sel",SELS],["dl-path",PATHS],["dl-func",FUNCNAMES]].forEach(([id,a])=>document.getElementById(id).innerHTML=a.map(v=>`<option value="${v}">`).join(""));
+let CTX=new Set(["item"]);
+function ctxEvents(){ const s=[]; CTX.forEach(c=>CTX_EVENTS[c].forEach(e=>{ if(!s.find(x=>x.name===e))s.push({name:e,ctx:c}); })); return s; }
+const TPL={ as:{cat:"logic",kw:"as",f:[{n:"sel",k:"sel",d:"@o"}]}, at:{cat:"logic",kw:"at",f:[{n:"sel",k:"sel",d:"@s"}]},
+  if:{cat:"logic",kw:"if",f:[{n:"l",k:"path",d:"@s.stat.health"},{n:"op",k:"cmp",d:"<="},{n:"r",k:"path",d:"10"}]},
+  unless:{cat:"logic",kw:"unless",f:[{n:"l",k:"path",d:"@o.stat.attack"},{n:"op",k:"cmp",d:">"},{n:"r",k:"path",d:"@s.stat.defense"}]},
+  runfn:{cat:"run",kw:"run function",f:[{n:"fn",k:"func",d:"bless"}]}, run:{cat:"run",kw:"run",f:[{n:"cmd",k:"path",d:"proc enable @a rallied:true"}]} };
+let UID=0; const nid=()=>"b"+(++UID);
+function mkChain(t){ const b={_id:nid(),tpl:t,kind:"chain",f:{}}; TPL[t].f.forEach(fd=>b.f[fd.n]=fd.d); return b; }
+function mkTrig(kind){ return kind==="every"?{_id:nid(),kind:"every",n:1}:{_id:nid(),kind,ev:null}; }
+function script(blocks){ return {_id:"s"+(++UID),name:"",blocks}; }
+// map the Lab's (past-tense) event names to the engine's hook events
+const EVENT_MAP={equipped:"equip",unequip:"unequip",used:"use",gained:"gain",lost:"lose",cast:"cast",
+  obtained:"obtain",progressed:"progress",completed:"complete",failed:"fail",ticked:"tick",set:"set",cleared:"cleared"};
+function setScriptName(sid,v){ const s=SCRIPTS.find(x=>x._id===sid); if(s)s.name=v; }
+function saveHook(sid){
+  const s=SCRIPTS.find(x=>x._id===sid); if(!s)return;
+  if(!s.name||!s.name.trim()){ alert("give the hook a name first (the field at the top of the script)"); return; }
+  const trig=s.blocks.find(b=>["when","while","every"].includes(b.kind));
+  if(!trig){ alert("add a trigger (when/while/every) first"); return; }
+  if(trig.kind==="while"){ alert("a 'while' is a GRANT (a persistent layer), not a fired hook — author it in the item's grants section, not here."); return; }
+  const on = trig.kind==="every" ? "turn.end" : (trig.ev ? (EVENT_MAP[trig.ev.name]||trig.ev.name) : "");
+  if(!on){ alert("drag an event into the trigger first"); return; }
+  const ctx=[...CTX][0]||"";
+  // build the command: the /execute chain + run (the part of the preview after the trigger head)
+  const chain=s.blocks.filter(b=>b.kind==="chain"&&["ctx","cond"].includes(TPL[b.tpl].cat))
+    .map(b=>TPL[b.tpl].kw+" "+TPL[b.tpl].f.map(fd=>b.f[fd.n]).join(" ")).join(" ");
+  const run=s.blocks.find(b=>b.kind==="chain"&&TPL[b.tpl].cat==="run");
+  if(!run){ alert("add a Run block (run function …) so the hook does something"); return; }
+  const inner = run.tpl==="runfn" ? `function run ${run.f.fn}` : run.f.cmd;   // run a function, or a raw command
+  const command = chain ? `execute ${chain} run ${inner}` : inner;            // only wrap in execute when there's a chain
+  const nm=s.name.trim().replace(/\s+/g,"_");
+  post(`/hook new ${nm}{on:${on}, context:${ctx}, run_command:"${command.replace(/"/g,'\\"')}"}`);
+  // if the Lab was opened from an element editor, drop the new hook straight into it + close the Lab
+  if(window.parent && window.parent!==window && window.parent.labAttachHook){ window.parent.labAttachHook(nm); }
+  else { alert(`created hook '${nm}' — open the ${ctx||"element"}'s editor, click 🪝, and attach it.`); }
+}
+// the parent calls this to pre-scope the Lab to an element's context (so ＋attach makes a matching hook)
+function setLabContext(kind){ CTX = new Set(kind ? [kind] : []); renderCtx(); renderPalette(); }
+let SCRIPTS=[], ACTIVE=null;
+function seed(){ const t=mkTrig("when"); t.ev={name:"equipped",ctx:"item",not:false,ext:[{conn:"in",value:"head",not:false}]};
+  const r=mkChain("runfn"); r.f.fn="don_helm"; SCRIPTS=[script([t,r])]; ACTIVE=SCRIPTS[0]._id; }
+let DRAG=null;
+function dg(e,d){ DRAG=d; e.dataTransfer.setData("text",""); e.stopPropagation(); }
+function over(e){ e.preventDefault(); e.currentTarget.classList.add("dropok"); e.stopPropagation(); }
+function out(e){ e.currentTarget.classList.remove("dropok"); }
+function findTrig(id){ for(const s of SCRIPTS){ const b=s.blocks.find(x=>x._id===id); if(b)return b; } }
+function ownerOf(id){ return SCRIPTS.find(s=>s.blocks.some(b=>b._id===id)); }
+function dropEvent(e,id){ e.preventDefault(); out(e); if(!DRAG)return; const t=findTrig(id); if(!t)return;
+  if(DRAG.type==="event") t.ev={name:DRAG.name,ctx:DRAG.ctx,not:false,ext:[]};
+  else if(DRAG.type==="not" && t.ev) t.ev.not=!t.ev.not; DRAG=null; render(); }
+function dropNotOnVal(e,id,i){ e.preventDefault(); out(e); if(!DRAG||DRAG.type!=="not")return; const t=findTrig(id); if(t&&t.ev&&t.ev.ext[i])t.ev.ext[i].not=!t.ev.ext[i].not; DRAG=null; render(); }
+function addExtClick(id){ const t=findTrig(id); if(!t||!t.ev)return; const nx=(EVENT_EXT[t.ev.name]||[])[t.ev.ext.length]; if(nx){ t.ev.ext.push({conn:nx.conn,value:nx.vals[0]||"",not:false}); render(); } }
+function active(){ return SCRIPTS.find(s=>s._id===ACTIVE); }
+function addTrig(k){ const s=active(); if(!s){alert("click a script to make it active first");return;} s.blocks=s.blocks.filter(b=>!["when","while","every"].includes(b.kind)); s.blocks.unshift(mkTrig(k)); render(); }
+function addChain(t){ const s=active(); if(!s){alert("click a script to make it active first");return;} const ri=s.blocks.findIndex(b=>b.kind==="chain"&&TPL[b.tpl].cat==="run");
+  if(TPL[t].cat==="run") s.blocks.push(mkChain(t)); else s.blocks.splice(ri<0?s.blocks.length:ri,0,mkChain(t)); render(); }
+function updatePreview(s){ if(!s)return; const el=document.getElementById("pv-"+s._id); if(el)el.innerHTML="≈ <b>"+esc(preview(s))+"</b>"; }
+function setF(id,n,v){ const s=ownerOf(id); if(s){const b=s.blocks.find(x=>x._id===id); if(b)b.f[n]=v; updatePreview(s);} }
+function setExt(id,i,v){ const t=findTrig(id); if(t&&t.ev&&t.ev.ext[i])t.ev.ext[i].value=v; updatePreview(ownerOf(id)); }
+function setEvery(id,v){ const t=findTrig(id); if(t)t.n=v; updatePreview(ownerOf(id)); }
+function clrEvNot(id){ const t=findTrig(id); if(t&&t.ev)t.ev.not=false; render(); }
+function clrExtNot(id,i){ const t=findTrig(id); if(t&&t.ev&&t.ev.ext[i])t.ev.ext[i].not=false; render(); }
+function clrEvent(id){ const t=findTrig(id); if(t)t.ev=null; render(); }
+function delExt(id,i){ const t=findTrig(id); if(t&&t.ev){t.ev.ext.splice(i,1); render();} }
+function delBlk(sid,id){ const s=SCRIPTS.find(x=>x._id===sid); if(s){s.blocks=s.blocks.filter(b=>b._id!==id); render();} }
+function setActive(id){ if(ACTIVE===id)return; ACTIVE=id; render(); }
+function newScript(){ const s=script([]); SCRIPTS.push(s); ACTIVE=s._id; render(); }
+function delScript(id){ SCRIPTS=SCRIPTS.filter(s=>s._id!==id); if(ACTIVE===id)ACTIVE=SCRIPTS[0]?SCRIPTS[0]._id:null; render(); }
+function toggleCtx(c){ CTX.has(c)?CTX.delete(c):CTX.add(c); renderPalette(); renderCtx(); }
+const STOP=`onmousedown="event.stopPropagation()" onclick="event.stopPropagation()"`;
+function field(b,fd){ const v=b.f[fd.n];
+  if(fd.k==="cmp")return `<select class="cmp" ${STOP} onchange="setF('${b._id}','${fd.n}',this.value)">${CMPS.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select>`;
+  const cls={sel:"sel",path:"op",func:"path"}[fd.k]||"op", list={sel:"dl-sel",path:"dl-path",func:"dl-func"}[fd.k]||"";
+  return `<input class="${cls}" ${list?`list="${list}"`:""} ${STOP} value="${String(v).replace(/"/g,"&quot;")}" oninput="setF('${b._id}','${fd.n}',this.value)">`; }
+function trigHTML(s,t,solo){
+  if(t.kind==="every") return `<div class="blk trigger ${solo?"solo":""}"><span class="kw">every</span>
+    <input class="num" type="number" ${STOP} value="${t.n}" oninput="setEvery('${t._id}',this.value)"><span class="kw">turns</span>
+    <span class="x" onclick="event.stopPropagation();delBlk('${s._id}','${t._id}')">✕</span></div>`;
+  const ev=t.ev;
+  const evSlot = ev
+    ? `<span class="evslot nottarget" ondragover="over(event)" ondragleave="out(event)" ondrop="dropEvent(event,'${t._id}')" title="drop NOT here to negate the event">
+        ${ev.not?`<span class="negtag" onclick="event.stopPropagation();clrEvNot('${t._id}')" title="remove not">not ✕</span>`:""}${ev.name}
+        <span class="evx" onclick="event.stopPropagation();clrEvent('${t._id}')" title="clear event">✕</span></span>`
+    : `<span class="evslot empty" ondragover="over(event)" ondragleave="out(event)" ondrop="dropEvent(event,'${t._id}')">drag an event here</span>`;
+  let exts="";
+  if(ev) ev.ext.forEach((x,i)=>{ const vals=((EVENT_EXT[ev.name]||[]).find(e=>e.conn===x.conn)||{}).vals||[];
+    exts+=`<span class="extslot"><span class="kw">${x.conn}</span>
+      <span class="nottarget" ondragover="over(event)" ondragleave="out(event)" ondrop="dropNotOnVal(event,'${t._id}',${i})" title="drop NOT here to negate the value">
+        ${x.not?`<span class="negtag" onclick="event.stopPropagation();clrExtNot('${t._id}',${i})" title="remove not">not ✕</span>`:""}<select ${STOP} onchange="setExt('${t._id}',${i},this.value)">${vals.map(o=>`<option ${o===x.value?"selected":""}>${o}</option>`).join("")||"<option></option>"}</select></span>
+      <span class="evx" onclick="event.stopPropagation();delExt('${t._id}',${i})" title="remove">✕</span></span>`; });
+  const canExt = ev && ev.ext.length < (EVENT_EXT[ev.name]||[]).length;
+  const addExt = canExt ? `<span class="addext" onclick="event.stopPropagation();addExtClick('${t._id}')" title="add this refinement">＋ ${(EVENT_EXT[ev.name][ev.ext.length]||{}).conn} …</span>` : "";
+  return `<div class="blk trigger ${solo?"solo":""}"><span class="kw">${t.kind}</span>${evSlot}${exts}${addExt}
+    <span class="x" onclick="event.stopPropagation();delBlk('${s._id}','${t._id}')">✕</span></div>`;
+}
+function chainHTML(s,b,solo){ const t=TPL[b.tpl];
+  return `<div class="blk ${t.cat} ${solo?"solo":""}"><span class="kw">${t.kw}</span>${t.f.map(fd=>field(b,fd)).join("")}
+    <span class="x" onclick="event.stopPropagation();delBlk('${s._id}','${b._id}')">✕</span></div>`; }
+function negName(p){ return p.not?`not ${p.value}`:p.value; }
+function preview(s){ const t=s.blocks.find(b=>["when","while","every"].includes(b.kind)); let head="(no trigger)";
+  if(t){ if(t.kind==="every") head=`every ${t.n} turns`;
+    else if(t.ev){ const ex=t.ev.ext.map(x=>`${x.conn} ${negName(x)}`).join(" "); head=`${t.kind} ${t.ev.not?"not ":""}${t.ev.name}${ex?" "+ex:""}`; }
+    else head=`${t.kind} …`; }
+  const chain=s.blocks.filter(b=>b.kind==="chain"&&TPL[b.tpl].cat==="logic").map(b=>TPL[b.tpl].kw+" "+TPL[b.tpl].f.map(fd=>b.f[fd.n]).join(" ")).join(" ");
+  const run=s.blocks.find(b=>b.kind==="chain"&&TPL[b.tpl].cat==="run");
+  const rn=run?(run.tpl==="runfn"?`run function ${run.f.fn}`:`run ${run.f.cmd}`):"run …";
+  return `${head}:  /execute ${chain?chain+" ":""}${rn}`; }
+function render(){ document.getElementById("canvas").innerHTML = SCRIPTS.map(s=>{ const solo=s.blocks.length===1;
+    const body = s.blocks.length ? s.blocks.map(b=> b.kind==="chain"?chainHTML(s,b,solo):trigHTML(s,b,solo)).join("") : `<div class="emptyscript">empty — click a Trigger to start.</div>`;
+    return `<div class="script ${ACTIVE===s._id?"active":""}" onclick="setActive('${s._id}')">
+      <div class="shead">${ACTIVE===s._id?"● active":"○ click to edit"}
+        <input class="hookname" placeholder="hook name…" value="${esc(s.name||"")}" onclick="event.stopPropagation()" oninput="setScriptName('${s._id}',this.value)">
+        <button class="savehook" onclick="event.stopPropagation();saveHook('${s._id}')">＋ attach</button>
+        <span class="x" onclick="event.stopPropagation();delScript('${s._id}')">✕ delete</span></div>
+      <div class="stack">${body}</div><div class="preview" id="pv-${s._id}">≈ <b>${esc(preview(s))}</b></div></div>`;
+  }).join("") + `<div class="newscript" onclick="newScript()">＋ new script (parallel)</div>`; }
+function renderCtx(){ document.getElementById("ctxbar").innerHTML = CONTEXTS.map(c=>`<span class="ctxchip ${CTX.has(c)?"on":""}" onclick="toggleCtx('${c}')">${c}</span>`).join(" "); }
+function renderPalette(){ const evs=ctxEvents();
+  document.getElementById("palette").innerHTML =
+    `<div class="pcat">Triggers</div>
+      <div class="pblock trigger" onclick="addTrig('when')">when <span class="sub">[event]</span></div>
+      <div class="pblock trigger" onclick="addTrig('while')">while <span class="sub">[event]</span></div>
+      <div class="pblock trigger" onclick="addTrig('every')">every <span class="sub">[n] turns</span></div>
+     <div class="pcat">Events</div>
+      ${evs.length?evs.map(e=>`<span class="pblock event" draggable="true" ondragstart='dg(event,{type:"event",name:"${e.name}",ctx:"${e.ctx}"})'>${e.name}<span class="tagr">${e.ctx}</span></span>`).join(""):`<div class="psub">pick a context above</div>`}
+     <div class="pcat">Logic</div>
+      <div class="pblock logic" onclick="addChain('as')">as <span class="sub">[sel]</span></div>
+      <div class="pblock logic" onclick="addChain('at')">at <span class="sub">[sel | x y]</span></div>
+      <div class="pblock logic" onclick="addChain('if')">if <span class="sub">[a][op][b]</span></div>
+      <div class="pblock logic" onclick="addChain('unless')">unless <span class="sub">[a][op][b]</span></div>
+      <span class="pblock notb" draggable="true" ondragstart='dg(event,{type:"not"})'>not <span class="sub">drag→</span></span>
+     <div class="pcat">Run</div>
+      <div class="pblock run" onclick="addChain('runfn')">run function</div>
+      <div class="pblock run" onclick="addChain('run')">run <span class="sub">[command]</span></div>`; }
+
+/* ======================= FUNCTION LAB ======================= */
+// file-esque paths nest with ':' and '/'. mock store: path -> [lines]
+let FUNCS={ "bless":["/tellraw @s ✨ blessed","stat.health(+5)"], "don_helm":["/tellraw @s helm donned","stat.armor_class(+2)"],
+  "combat:ignite":["/effect give @o burning 3","pulse @o on_fire:true"], "combat:aoe/fireburst":["/execute as @a[distance=..2] run function combat:ignite"],
+  "cleanse":["/effect clear @s"] };
+let FN_SEL="bless", FN_NEW=false, FN_RENDERED=false;
+function splitPath(p){ const a=String(p).split(/([:/])/); const out=[{seg:a[0],delim:""}]; for(let i=1;i<a.length;i+=2)out.push({delim:a[i],seg:a[i+1]||""}); return out; }
+function buildTree(){ const root={children:{},order:[]}; Object.keys(FUNCS).sort().forEach(p=>{ let n=root,pre="";
+  splitPath(p).forEach(({seg,delim})=>{ pre=pre?pre+delim+seg:seg; if(!n.children[pre]){n.children[pre]={seg,delim,prefix:pre,children:{},order:[],isFunc:false}; n.order.push(pre);} n=n.children[pre]; }); n.isFunc=true; }); return root; }
+function fnRows(){ const root=buildTree(), rows=[];
+  (function walk(node,depth){ node.order.forEach(k=>{ const c=node.children[k];
+    const guide=depth?`<span class="fnguide">${"   ".repeat(depth-1)}└─ </span>`:"";
+    const segCls=c.isFunc?(FN_SEL===c.prefix&&!FN_NEW?"fnseg sel":"fnseg"):"fnseg folder";
+    const onclick=c.isFunc?`onclick="selFn('${c.prefix}')"`:"";
+    const btns=c.isFunc?`<span class="fnbtns"><button class="fnbtn run" title="run" onclick="post('/function run ${c.prefix}')">▶</button>
+      <button class="fnbtn" title="edit" onclick="selFn('${c.prefix}')">✎</button>
+      <button class="fnbtn del" title="delete" onclick="delFn('${c.prefix}')">🗑</button></span>`:"";
+    rows.push(`<div class="fnrow">${guide}<span class="${segCls}" ${onclick}>${c.delim?`<span class="fndelim">${c.delim}</span>`:""}${esc(c.seg)}</span>${btns}</div>`);
+    walk(c,depth+1); }); })(root,0);
+  return rows.join(""); }
+function selFn(p){ FN_SEL=p; FN_NEW=false; renderFnLab(); }
+function newFn(){ FN_NEW=true; FN_SEL=null; renderFnLab(); const pi=document.getElementById("fn_path"); if(pi)pi.focus(); }
+function delFn(p){ delete FUNCS[p]; if(FN_SEL===p)FN_SEL=Object.keys(FUNCS)[0]||null; post(`/function remove ${p}`); renderFnLab(); }
+function saveFn(){ const path=document.getElementById("fn_path").value.trim(), body=document.getElementById("fn_body").value;
+  if(!path){ alert("give the function a path first (e.g. combat:ignite)"); return; }
+  const lines=body.split("\n"); FUNCS[path]=lines; FN_SEL=path; FN_NEW=false;
+  post(`/function edit ${path}\n${lines.join("\n")}`);   // persist to the real backend (same as the old page)
+  renderFnLab(); }
+function fnGutter(n){ return Array.from({length:n},(_,i)=>`<div class="fnln">${i+1}</div>`).join(""); }
+function syncGutter(){ const ta=document.getElementById("fn_body"); document.getElementById("fn_gutter").innerHTML=fnGutter(Math.max(1,ta.value.split("\n").length)); }
+function renderFnLab(){
+  document.getElementById("fnlist").innerHTML = `<div class="pcat">Functions</div>`
+    + (Object.keys(FUNCS).length?fnRows():`<div class="psub">no functions yet</div>`)
+    + `<div class="newscript" style="margin-top:10px" onclick="newFn()">＋ new function</div>`;
+  const editing = FN_NEW ? "" : FN_SEL;
+  const lines = (editing && FUNCS[editing]) ? FUNCS[editing] : [];
+  const body = lines.join("\n"); const n = Math.max(1, body.split("\n").length || 1);
+  document.getElementById("fneditor").innerHTML = `
+    <div class="erow"><label class="hint" style="width:40px">path</label>
+      <input id="fn_path" class="fnpath" placeholder="e.g. combat:talents/death" value="${editing?esc(editing):""}"></div>
+    <div class="fndoc" style="position:relative"><div class="fngutter" id="fn_gutter">${fnGutter(n)}</div>
+      <textarea id="fn_body" class="fnbody" spellcheck="false"
+        oninput="syncGutter();fnShowAC()" onclick="fnShowAC()" onkeyup="fnCaretKey(event)"
+        onkeydown="fnKey(event)" onscroll="fnSyncScroll()" onblur="setTimeout(fnHideAC,150)"
+        placeholder="one command per line — e.g.&#10;/tellraw @s hello&#10;stat.health(+5)">${esc(body)}</textarea>
+      <div id="fn_ac" class="fn-ac"></div></div>
+    <div class="erow" style="margin-top:10px"><button class="go" onclick="saveFn()">Save</button>
+      <span class="hint">one command per line · Tab completes · paths nest with : and / · runnable from a hook's <b>run function</b></span></div>`;
+}
+// ---- line-by-line autofill (each line completes like the console, via /complete) ----
+let fnAcItems = [], fnAcSel = -1, _fnCW = 0;
+function fnAc() { return document.getElementById("fn_ac"); }
+function fnAcOpen() { const b = fnAc(); return b && b.style.display === "block"; }
+function fnHideAC() { const b = fnAc(); if (b) b.style.display = "none"; fnAcItems = []; fnAcSel = -1; }
+function fnSyncScroll() { fnHideAC(); }
+function fnCurToken(ta) { return ta.value.slice(0, ta.selectionStart).split(/[ {,>\n]/).pop(); }
+function commonPrefix(arr) { if (!arr.length) return ""; let p = arr[0]; for (const s of arr) { while (!s.startsWith(p)) p = p.slice(0, -1); } return p; }
+function fnCharWidth(font) { if (_fnCW) return _fnCW; const s = document.createElement("span");
+  s.style.cssText = "position:absolute;visibility:hidden;white-space:pre"; s.style.font = font; s.textContent = "M".repeat(20);
+  document.body.appendChild(s); _fnCW = s.getBoundingClientRect().width / 20; document.body.removeChild(s); return _fnCW; }
+async function fnShowAC() {
+  const ta = document.getElementById("fn_body"), box = fnAc(); if (!ta || !box) return;
+  const before = ta.value.slice(0, ta.selectionStart);
+  const line = before.slice(before.lastIndexOf("\n") + 1);
+  if (!line.trim()) return fnHideAC();
+  try { fnAcItems = await (await fetch("/complete?line=" + encodeURIComponent(line))).json(); }
+  catch (e) { return fnHideAC(); }   // standalone (no backend) -> no autofill
+  if (!fnAcItems.length) return fnHideAC();
+  fnAcSel = -1;
+  box.innerHTML = fnAcItems.map((c, i) => `<div onmousedown="event.preventDefault();fnAcceptAC(${i})">${esc(c)}</div>`).join("");
+  const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 19.5, cw = fnCharWidth(cs.font);
+  const lineIdx = (before.match(/\n/g) || []).length, col = ta.selectionStart - (before.lastIndexOf("\n") + 1);
+  box.style.top = (ta.offsetTop + (parseFloat(cs.paddingTop) || 8) + (lineIdx + 1) * lh - ta.scrollTop) + "px";
+  box.style.left = (ta.offsetLeft + (parseFloat(cs.paddingLeft) || 10) + col * cw - ta.scrollLeft) + "px";
+  box.style.display = "block";
+}
+function fnMoveSel(d) { fnAcSel = (fnAcSel + d + fnAcItems.length) % fnAcItems.length;
+  [...fnAc().children].forEach((el, i) => el.className = i === fnAcSel ? "sel" : ""); }
+function fnReplaceToken(s, addSpace) {
+  const ta = document.getElementById("fn_body"), caret = ta.selectionStart;
+  const tok = ta.value.slice(0, caret).split(/[ {,>\n]/).pop(), start = caret - tok.length;
+  const ins = s + (addSpace ? " " : "");
+  ta.value = ta.value.slice(0, start) + ins + ta.value.slice(caret);
+  const pos = start + ins.length; ta.focus(); ta.setSelectionRange(pos, pos); syncGutter();
+}
+function fnAcceptAC(i) { if (fnAcItems[i] == null) return; fnReplaceToken(fnAcItems[i], true); fnHideAC(); fnShowAC(); }
+function fnTab() {
+  if (!fnAcItems.length) return;
+  if (fnAcSel >= 0) return fnAcceptAC(fnAcSel);
+  if (fnAcItems.length === 1) return fnAcceptAC(0);
+  const lcp = commonPrefix(fnAcItems), ta = document.getElementById("fn_body");
+  if (lcp.length > fnCurToken(ta).length) { fnReplaceToken(lcp, false); fnShowAC(); return; }
+  fnMoveSel(1);
+}
+function fnKey(e) {
+  if (e.key === "Tab") { e.preventDefault(); fnTab(); return; }
+  if (!fnAcOpen()) return;
+  if (e.key === "ArrowDown") { e.preventDefault(); fnMoveSel(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); fnMoveSel(-1); }
+  else if (e.key === "Enter" && fnAcSel >= 0) { e.preventDefault(); fnAcceptAC(fnAcSel); }
+  else if (e.key === "Escape") { e.preventDefault(); fnHideAC(); }
+}
+function fnCaretKey(e) { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) fnShowAC(); }
+
+seed(); renderCtx(); renderPalette(); render(); loadSlots();
+</script>
+</body></html>

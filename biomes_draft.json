@@ -1,0 +1,44 @@
+{
+  "_README": "DRAFT biome taxonomy for redline. Each biome: label (display), color (atlas fill hex), glyph (atlas icon/emoji), weight (relative frequency during /map generate), temperature (cold|temperate|hot) + moisture (arid|normal|wet) [these drive weather bias in weather.json, so you don't repeat per-weather tables], affinity (biomes it likes to border — grows continuity during generation). Edit freely: rename, delete, add, recolor, retag, reweight. Families are just comments via the _family key for your reading; the engine ignores _family.",
+
+  "plains":           {"label": "Plains",            "color": "#8db360", "glyph": "🌾", "weight": 12, "temperature": "temperate", "moisture": "normal", "affinity": ["meadow", "steppe", "hills", "woodland"], "_family": "grassland"},
+  "meadow":           {"label": "Meadow",            "color": "#a7c957", "glyph": "🌼", "weight": 6,  "temperature": "temperate", "moisture": "wet",    "affinity": ["plains", "woodland", "river"], "_family": "grassland"},
+  "steppe":           {"label": "Steppe",            "color": "#c2b280", "glyph": "🌿", "weight": 6,  "temperature": "temperate", "moisture": "arid",   "affinity": ["plains", "badlands", "hills"], "_family": "grassland"},
+  "savanna":          {"label": "Savanna",           "color": "#c9a14a", "glyph": "🦒", "weight": 6,  "temperature": "hot",       "moisture": "arid",   "affinity": ["steppe", "desert", "woodland"], "_family": "grassland"},
+
+  "woodland":         {"label": "Woodland",          "color": "#6b8e3d", "glyph": "🪵", "weight": 7,  "temperature": "temperate", "moisture": "normal", "affinity": ["plains", "temperate_forest", "hills"], "_family": "forest"},
+  "temperate_forest": {"label": "Temperate Forest",  "color": "#4a7c44", "glyph": "🌳", "weight": 9,  "temperature": "temperate", "moisture": "normal", "affinity": ["woodland", "boreal_forest", "hills", "river"], "_family": "forest"},
+  "boreal_forest":    {"label": "Boreal Forest",     "color": "#2f5d4f", "glyph": "🌲", "weight": 7,  "temperature": "cold",      "moisture": "wet",    "affinity": ["temperate_forest", "tundra", "mountain"], "_family": "forest"},
+  "rainforest":       {"label": "Rainforest",        "color": "#1f6b3b", "glyph": "🌴", "weight": 5,  "temperature": "hot",       "moisture": "wet",    "affinity": ["jungle_river", "swamp", "savanna"], "_family": "forest"},
+
+  "tundra":           {"label": "Tundra",            "color": "#b8c4c2", "glyph": "🦌", "weight": 6,  "temperature": "cold",      "moisture": "normal", "affinity": ["boreal_forest", "snowfield", "mountain"], "_family": "cold"},
+  "snowfield":        {"label": "Snowfield",         "color": "#e8eef2", "glyph": "❄️", "weight": 4,  "temperature": "cold",      "moisture": "wet",    "affinity": ["tundra", "glacier", "mountain"], "_family": "cold"},
+  "glacier":          {"label": "Glacier",           "color": "#bcd6e6", "glyph": "🧊", "weight": 3,  "temperature": "cold",      "moisture": "normal", "affinity": ["snowfield", "mountain", "ocean"], "_family": "cold"},
+  "alpine":           {"label": "Alpine",            "color": "#8fa3a8", "glyph": "🏔️", "weight": 4,  "temperature": "cold",      "moisture": "normal", "affinity": ["mountain", "tundra", "hills"], "_family": "cold"},
+
+  "hills":            {"label": "Hills",             "color": "#9caf6b", "glyph": "⛰️", "weight": 8,  "temperature": "temperate", "moisture": "normal", "affinity": ["plains", "mountain", "woodland"], "_family": "highland"},
+  "mountain":         {"label": "Mountain",          "color": "#8a8d91", "glyph": "🗻", "weight": 7,  "temperature": "cold",      "moisture": "normal", "affinity": ["hills", "alpine", "boreal_forest", "volcano"], "_family": "highland"},
+  "volcano":          {"label": "Volcano",           "color": "#6e3b3b", "glyph": "🌋", "weight": 2,  "temperature": "hot",       "moisture": "arid",   "affinity": ["mountain", "ashland"], "_family": "highland"},
+  "ashland":          {"label": "Ashland",           "color": "#5a5145", "glyph": "🪨", "weight": 2,  "temperature": "hot",       "moisture": "arid",   "affinity": ["volcano", "wasteland", "badlands"], "_family": "highland"},
+
+  "desert":           {"label": "Desert",            "color": "#e3c179", "glyph": "🏜️", "weight": 7,  "temperature": "hot",       "moisture": "arid",   "affinity": ["dunes", "badlands", "savanna", "mesa"], "_family": "arid"},
+  "dunes":            {"label": "Dunes",             "color": "#d9b066", "glyph": "🐪", "weight": 4,  "temperature": "hot",       "moisture": "arid",   "affinity": ["desert", "oasis"], "_family": "arid"},
+  "mesa":             {"label": "Mesa",              "color": "#b5651d", "glyph": "🟧", "weight": 3,  "temperature": "hot",       "moisture": "arid",   "affinity": ["desert", "badlands", "ashland"], "_family": "arid"},
+  "badlands":         {"label": "Badlands",          "color": "#b07a4a", "glyph": "🌵", "weight": 4,  "temperature": "hot",       "moisture": "arid",   "affinity": ["desert", "mesa", "steppe"], "_family": "arid"},
+  "oasis":            {"label": "Oasis",             "color": "#5fae7a", "glyph": "🏝️", "weight": 2,  "temperature": "hot",       "moisture": "normal", "affinity": ["desert", "dunes"], "_family": "arid"},
+
+  "swamp":            {"label": "Swamp",             "color": "#5c6b4a", "glyph": "🐸", "weight": 5,  "temperature": "temperate", "moisture": "wet",    "affinity": ["marsh", "rainforest", "river"], "_family": "wetland"},
+  "marsh":            {"label": "Marsh",             "color": "#7a8b5a", "glyph": "🪷", "weight": 4,  "temperature": "temperate", "moisture": "wet",    "affinity": ["swamp", "river", "coast", "lake"], "_family": "wetland"},
+
+  "ocean":            {"label": "Ocean",             "color": "#2e5e8c", "glyph": "🌊", "weight": 10, "temperature": "temperate", "moisture": "wet",    "affinity": ["ocean", "reef", "coast", "glacier"], "_family": "water"},
+  "reef":             {"label": "Reef",              "color": "#2fa3a3", "glyph": "🐠", "weight": 2,  "temperature": "hot",       "moisture": "wet",    "affinity": ["ocean", "coast"], "_family": "water"},
+  "coast":            {"label": "Coast",             "color": "#d8c98a", "glyph": "🏖️", "weight": 5,  "temperature": "temperate", "moisture": "wet",    "affinity": ["ocean", "plains", "marsh", "river"], "_family": "water"},
+  "lake":             {"label": "Lake",              "color": "#3f7fae", "glyph": "💧", "weight": 4,  "temperature": "temperate", "moisture": "wet",    "affinity": ["river", "marsh", "meadow", "plains"], "_family": "water"},
+  "river":            {"label": "River",             "color": "#4a90c2", "glyph": "🏞️", "weight": 5,  "temperature": "temperate", "moisture": "wet",    "affinity": ["lake", "coast", "plains", "temperate_forest"], "_family": "water"},
+  "jungle_river":     {"label": "Jungle River",      "color": "#2f8f6b", "glyph": "🛶", "weight": 2,  "temperature": "hot",       "moisture": "wet",    "affinity": ["rainforest", "swamp"], "_family": "water"},
+
+  "cave":             {"label": "Cave",              "color": "#3a3a40", "glyph": "🦇", "weight": 3,  "temperature": "temperate", "moisture": "normal", "affinity": ["mountain", "hills", "cavern"], "_family": "underground"},
+  "cavern":           {"label": "Crystal Cavern",    "color": "#2c2c33", "glyph": "💎", "weight": 1,  "temperature": "cold",      "moisture": "normal", "affinity": ["cave", "mountain"], "_family": "underground"},
+
+  "wasteland":        {"label": "Wasteland",         "color": "#8a7f6b", "glyph": "☠️", "weight": 2,  "temperature": "hot",       "moisture": "arid",   "affinity": ["ashland", "badlands", "mesa"], "_family": "ruined"}
+}

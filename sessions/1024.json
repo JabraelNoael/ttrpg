@@ -1,0 +1,700 @@
+{
+  "id": 1024,
+  "name": "ability_demo",
+  "turn": 0,
+  "turn_active": null,
+  "weather": {
+    "by_unit": {},
+    "turn": -1,
+    "queue": []
+  },
+  "events": [],
+  "cal_events": [],
+  "vars": {},
+  "functions": {
+    "corpse_contract": [
+      "/tellraw @s your corpse honors the contract"
+    ],
+    "predators_bureaucracy": [
+      "/tellraw @s you seize the fallen's burdens"
+    ],
+    "deferred_resolve": [
+      "/tellraw @s every deferred consequence resolves at once"
+    ],
+    "borrowed_tomorrow": [
+      "/stat modify @s multiplier max_mana add -0.1",
+      "/stat modify @s multiplier mana_regen set 0",
+      "/stat modify @s mana add 30"
+    ]
+  },
+  "history": [
+    "[turn 0 \u00b7 no active turn] /character new demo",
+    "[turn 0 \u00b7 no active turn] /stat new demo fear 50",
+    "[turn 0 \u00b7 no active turn] /stat new demo regret 30",
+    "[turn 0 \u00b7 no active turn] /stat new demo joy 20",
+    "[turn 0 \u00b7 no active turn] /stat new demo envy 15",
+    "[turn 0 \u00b7 no active turn] /stat new demo speed 5",
+    "[turn 0 \u00b7 no active turn] /stat new demo mana 100",
+    "[turn 0 \u00b7 no active turn] /stat new demo mana_regen 5",
+    "[turn 0 \u00b7 no active turn] /stat new demo luck 25",
+    "[turn 0 \u00b7 no active turn] /stat new demo footnote 0",
+    "[turn 0 \u00b7 no active turn] /stat new demo steps 0",
+    "[turn 0 \u00b7 no active turn] /stat new demo campfire_heat 0",
+    "[turn 0 \u00b7 no active turn] /stat new demo debt 0",
+    "[turn 0 \u00b7 no active turn] /function edit corpse_contract\n/tellraw @s your corpse honors the contract",
+    "[turn 0 \u00b7 no active turn] /function edit predators_bureaucracy\n/tellraw @s you seize the fallen's burdens",
+    "[turn 0 \u00b7 no active turn] /function edit deferred_resolve\n/tellraw @s every deferred consequence resolves at once",
+    "[turn 0 \u00b7 no active turn] /ability new demo emotional_alchemy{name:\"Emotional Alchemy\",cost:[stat.fear(10)],cooldown:3,on_hit:[stat.speed(10)],description:\"FULLY SUPPORTED. Consume an emotion to gain a resource. Built: fear->speed. Same pattern: regret->mana, joy->health, envy->critical_scale.\"}",
+    "[turn 0 \u00b7 no active turn] /ability new demo emotional_alchemy_regret{name:\"Emotional Alchemy: Regret\",cost:[stat.regret(10)],cooldown:3,on_hit:[stat.mana(10)],description:\"FULLY. Second variant of the same cost/on_hit pattern: regret -> mana.\"}",
+    "[turn 0 \u00b7 no active turn] /ability new demo borrowed_tomorrow{name:\"Borrowed Tomorrow\",cost:[stat.mana(20)],cooldown:5,on_hit:[stat.mana(30)],description:\"PARTIAL. Cost models the reserved mana; on_hit grants the burst (next turns of regen up front). Halting future regen until repaid is a flag the DM tracks (regen is automatic).\"}",
+    "[turn 0 \u00b7 no active turn] /ability new demo bureau_of_coincidences{name:\"Bureau of Coincidences\",cost:[stat.luck(10)],cooldown:4,description:\"PARTIAL. The luck cost is enforced; the converging coincidences are narrated by the DM.\"}",
+    "[turn 0 \u00b7 no active turn] /ability new demo infinite_campfire{name:\"Infinite Campfire\",on_hit:[stat.campfire_heat(5)],cooldown:1,description:\"PARTIAL. Burning an item adds permanent heat (campfire_heat accumulates, never drops). DM removes the burned item and picks the value.\"}",
+    "[turn 0 \u00b7 no active turn] /ability new demo paradox_engine{name:\"Paradox Engine\",description:\"NOT SUPPORTED. Energy proportional to how impossible a contradiction is - unquantifiable. DM sets any gain by hand.\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo predators_bureaucracy{name:\"Predator's Bureaucracy\",proc:[{enemy_killed:true}],reaction:[/function predators_bureaucracy],description:\"PARTIAL. Fires when you pulse enemy_killed. Runs a function for what transfers; you decide which effects/quests carry over.\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo contract_with_future_corpse{name:\"Contract With Future Corpse\",proc:[{died:true}],reaction:[/function corpse_contract],description:\"WELL SUPPORTED. On death (died proc) your corpse runs a contract function. The contract is whatever you put in that function.\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo living_footnote{name:\"Living Footnote\",proc:[{footnote_full:true}],description:\"PARTIAL. footnote stat tracks stacks (DM pulses when you are referenced indirectly). At 100, pulse footnote_full to trigger the rewrite (DM adjudicates).\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo conservation_of_narrative{name:\"Conservation of Narrative\",proc:[{died:true,plot_armor:true}],reaction:[stat.health(1)],description:\"PARTIAL. With plot_armor enabled, dying instead leaves you at 1 hp. DM toggles plot_armor by narrative tension.\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo apotheosis_of_the_mundane{name:\"Apotheosis of the Mundane\",proc:[{walked_enough:true}],description:\"PARTIAL. Track an ordinary action as a stat (e.g. steps). At a threshold, pulse walked_enough to unlock the supernatural version (DM grants the flag/ability).\"}",
+    "[turn 0 \u00b7 no active turn] /talent new demo statistical_outlier{name:\"Statistical Outlier\",description:\"NOT SUPPORTED. Needs to hook arbitrary event probabilities. Pure DM ruling.\"}",
+    "[turn 0 \u00b7 no active turn] /effect new demo deferred_consequences{name:\"Deferred Consequences\",duration:4,step:-1,reaction:[/function deferred_resolve],description:\"PARTIAL. Lasts ~30s (4 turns); on the last turn runs deferred_resolve. You append each stored consequence to that function during the window.\"}",
+    "[turn 0 \u00b7 no active turn] /effect new demo echo_debt{name:\"Echo Debt (cost)\",duration:8,description:\"PARTIAL. The 60s self-debuff as a timed effect. The ability-copy/delay/proximity core stays DM-run.\"}",
+    "[turn 0 \u00b7 no active turn] /session save ability_demo",
+    "[turn 0 \u00b7 no active turn] /function edit borrowed_tomorrow\n/stat modify @s multiplier max_mana add -0.1\n/stat modify @s multiplier mana_regen set 0\n/stat modify @s mana add 30",
+    "[turn 0 \u00b7 no active turn] /ability modify demo borrowed_tomorrow {cooldown:1,cost:[],on_hit:[/function borrowed_tomorrow],description:\"FULLY (you were right). Reserve = max_mana mult -0.1; halt regen = mana_regen mult 0; burst = +30 mana - all via an on_hit function. Repaying restores the mults (DM, by fiction).\"}"
+  ],
+  "players": {
+    "demo": {
+      "name": "demo",
+      "inventory_slots": null,
+      "nbt": {
+        "class": null,
+        "race": null,
+        "clan": null,
+        "level": null,
+        "alignment": null,
+        "sex": null,
+        "background": null,
+        "backstory": null,
+        "oath": null,
+        "deity": null,
+        "eyes": null,
+        "structure": null,
+        "dominant_hand": null,
+        "height": null,
+        "hair": null,
+        "character_details": null,
+        "npc": false,
+        "equip_slots": {
+          "eyewear": 1,
+          "headwear": 1,
+          "forehead": 1,
+          "earrings": 2,
+          "neckwear": 1,
+          "mask": 1,
+          "helmet": 1,
+          "pauldrons": 1,
+          "rerebrace": 1,
+          "chestplate": 1,
+          "vambrace": 1,
+          "tunic": 1,
+          "robe": 1,
+          "gauntlets": 1,
+          "belt": 1,
+          "leggings": 1,
+          "poleyn": 1,
+          "graves": 1,
+          "pants": 1,
+          "anklewear": 1,
+          "misc": 2,
+          "socks": 1,
+          "sabatons": 1,
+          "ring": 4,
+          "wristwear": 2,
+          "main_hand": 1,
+          "off_hand": 1
+        },
+        "uuid": "pl-Q1Px"
+      },
+      "stats": {
+        "max_health": 0,
+        "max_mana": 0,
+        "health": 0,
+        "mana": 100,
+        "health_regen": 0,
+        "mana_regen": 5,
+        "vitality": 0,
+        "initiative": 0,
+        "speed": 5,
+        "attack": 0,
+        "critical_scale": 0,
+        "reach": 0,
+        "magic": 0,
+        "magia_pool": 0,
+        "bludgeon_affinity": 0,
+        "pierce_affinity": 0,
+        "slash_affinity": 0,
+        "arcana_affinity": 0,
+        "aether_affinity": 0,
+        "ethereal_affinity": 0,
+        "ichor_affinity": 0,
+        "bludgeon": 0,
+        "pierce": 0,
+        "slash": 0,
+        "arcana": 0,
+        "aether": 0,
+        "ethereal": 0,
+        "ichor": 0,
+        "physical_penetration": 0,
+        "bludgeon_penetration_base": 0,
+        "pierce_penetration_base": 0,
+        "slash_penetration_base": 0,
+        "bludgeon_penetration_cap": 0,
+        "pierce_penetration_cap": 0,
+        "slash_penetration_cap": 0,
+        "bludgeon_penetration": 0,
+        "pierce_penetration": 0,
+        "slash_penetration": 0,
+        "armor_class": 0,
+        "armor_class_efficiency": 0,
+        "defense": 0,
+        "physical_resistance": 0,
+        "bludgeon_resistance_base": 0,
+        "pierce_resistance_base": 0,
+        "slash_resistance_base": 0,
+        "bludgeon_resistance_cap": 0,
+        "pierce_resistance_cap": 0,
+        "slash_resistance_cap": 0,
+        "bludgeon_resistance": 0,
+        "pierce_resistance": 0,
+        "slash_resistance": 0,
+        "ward": 0,
+        "arcana_ward_base": 0,
+        "aether_ward_base": 0,
+        "ethereal_ward_base": 0,
+        "ichor_ward_base": 0,
+        "arcana_ward": 0,
+        "aether_ward": 0,
+        "ethereal_ward": 0,
+        "ichor_ward": 0,
+        "willpower": 0,
+        "tenacity": 0,
+        "luck": 25,
+        "party_size": 0,
+        "yield": 0,
+        "turn": 0,
+        "fear": 50,
+        "regret": 30,
+        "joy": 20,
+        "envy": 15,
+        "footnote": 0,
+        "steps": 0,
+        "campfire_heat": 0,
+        "debt": 0
+      },
+      "stat_detail": {
+        "max_health": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "max_mana": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "health": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "mana": {
+          "base": 100,
+          "mult": 1,
+          "flat": 0
+        },
+        "health_regen": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "mana_regen": {
+          "base": 5,
+          "mult": 1,
+          "flat": 0
+        },
+        "vitality": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "initiative": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "speed": {
+          "base": 5,
+          "mult": 1,
+          "flat": 0
+        },
+        "attack": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "critical_scale": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "reach": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "magic": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "magia_pool": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "arcana_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "aether_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ethereal_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ichor_affinity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "arcana": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "aether": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ethereal": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ichor": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "physical_penetration": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_penetration_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_penetration_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_penetration_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_penetration_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_penetration_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_penetration_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_penetration": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_penetration": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_penetration": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "armor_class": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "armor_class_efficiency": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "defense": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "physical_resistance": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_resistance_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_resistance_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_resistance_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_resistance_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_resistance_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_resistance_cap": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "bludgeon_resistance": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "pierce_resistance": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "slash_resistance": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ward": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "arcana_ward_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "aether_ward_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ethereal_ward_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ichor_ward_base": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "arcana_ward": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "aether_ward": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ethereal_ward": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "ichor_ward": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "willpower": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "tenacity": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "luck": {
+          "base": 25,
+          "mult": 1,
+          "flat": 0
+        },
+        "party_size": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "yield": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "turn": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "fear": {
+          "base": 50,
+          "mult": 1,
+          "flat": 0
+        },
+        "regret": {
+          "base": 30,
+          "mult": 1,
+          "flat": 0
+        },
+        "joy": {
+          "base": 20,
+          "mult": 1,
+          "flat": 0
+        },
+        "envy": {
+          "base": 15,
+          "mult": 1,
+          "flat": 0
+        },
+        "footnote": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "steps": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "campfire_heat": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        },
+        "debt": {
+          "base": 0,
+          "mult": 1,
+          "flat": 0
+        }
+      },
+      "formulas": {
+        "health": "IF(stat.max_health > 0, MIN(stat.health + stat.health_regen * DELTA(stat.turn), stat.max_health), stat.health + stat.health_regen * DELTA(stat.turn))",
+        "mana": "IF(stat.max_mana > 0, MIN(stat.mana + stat.mana_regen * DELTA(stat.turn), stat.max_mana), stat.mana + stat.mana_regen * DELTA(stat.turn))",
+        "bludgeon": "stat.attack * IF(stat.bludgeon_affinity > 1, stat.bludgeon_affinity^AFFINITY_TAX, stat.bludgeon_affinity)",
+        "pierce": "stat.attack * IF(stat.pierce_affinity > 1, stat.pierce_affinity^AFFINITY_TAX, stat.pierce_affinity)",
+        "slash": "stat.attack * IF(stat.slash_affinity > 1, stat.slash_affinity^AFFINITY_TAX, stat.slash_affinity)",
+        "bludgeon_penetration": "LET(pen, 1 - ((1 - stat.physical_penetration) * (1 - stat.bludgeon_penetration_base)), IF(pen > stat.bludgeon_penetration_cap, stat.bludgeon_penetration_cap, pen))",
+        "pierce_penetration": "LET(pen, 1 - ((1 - stat.physical_penetration) * (1 - stat.pierce_penetration_base)), IF(pen > stat.pierce_penetration_cap, stat.pierce_penetration_cap, pen))",
+        "slash_penetration": "LET(pen, 1 - ((1 - stat.physical_penetration) * (1 - stat.slash_penetration_base)), IF(pen > stat.slash_penetration_cap, stat.slash_penetration_cap, pen))",
+        "bludgeon_resistance": "LET(resist, 1 - ((1 - stat.physical_resistance) * (1 - stat.bludgeon_resistance_base)), IF(resist > stat.bludgeon_resistance_cap, stat.bludgeon_resistance_cap, resist))",
+        "pierce_resistance": "LET(resist, 1 - ((1 - stat.physical_resistance) * (1 - stat.pierce_resistance_base)), IF(resist > stat.pierce_resistance_cap, stat.pierce_resistance_cap, resist))",
+        "slash_resistance": "LET(resist, 1 - ((1 - stat.physical_resistance) * (1 - stat.slash_resistance_base)), IF(resist > stat.slash_resistance_cap, stat.slash_resistance_cap, resist))",
+        "magia_pool": "1 / (stat.arcana_affinity^MAGIA_EXP + stat.aether_affinity^MAGIA_EXP + stat.ethereal_affinity^MAGIA_EXP + stat.ichor_affinity^MAGIA_EXP)",
+        "arcana": "(stat.arcana_affinity * stat.magia_pool) * stat.magic",
+        "aether": "(stat.aether_affinity * stat.magia_pool) * stat.magic",
+        "ethereal": "(stat.ethereal_affinity * stat.magia_pool) * stat.magic",
+        "ichor": "(stat.ichor_affinity * stat.magia_pool) * stat.magic",
+        "arcana_ward": "(stat.ward^WARD_EXP * stat.arcana_ward_base^WARD_EXP) * stat.magic",
+        "aether_ward": "(stat.ward^WARD_EXP * stat.aether_ward_base^WARD_EXP) * stat.magic",
+        "ethereal_ward": "(stat.ward^WARD_EXP * stat.ethereal_ward_base^WARD_EXP) * stat.magic",
+        "ichor_ward": "(stat.ward^WARD_EXP * stat.ichor_ward_base^WARD_EXP) * stat.magic"
+      },
+      "proc_state": {},
+      "items": [],
+      "equipment": {},
+      "talents": [
+        "predators_bureaucracy{level:1,description:\"PARTIAL. Fires when you pulse enemy_killed. Runs a function for what transfers; you decide which effects/quests carry over.\",origin:\"\",proc:[{enemy_killed:true}],reaction:[predators_bureaucracy],name:\"Predator's Bureaucracy\",uuid:\"tl-Tkj0\"}",
+        "contract_with_future_corpse{level:1,description:\"WELL SUPPORTED. On death (died proc) your corpse runs a contract function. The contract is whatever you put in that function.\",origin:\"\",proc:[{died:true}],reaction:[corpse_contract],name:\"Contract With Future Corpse\",uuid:\"tl-qC5w\"}",
+        "living_footnote{level:1,description:\"PARTIAL. footnote stat tracks stacks (DM pulses when you are referenced indirectly). At 100, pulse footnote_full to trigger the rewrite (DM adjudicates).\",origin:\"\",proc:[{footnote_full:true}],reaction:None,name:\"Living Footnote\",uuid:\"tl-8cmR\"}",
+        "conservation_of_narrative{level:1,description:\"PARTIAL. With plot_armor enabled, dying instead leaves you at 1 hp. DM toggles plot_armor by narrative tension.\",origin:\"\",proc:[{died:true,plot_armor:true}],reaction:[stat.health(1)],name:\"Conservation of Narrative\",uuid:\"tl-ubhj\"}",
+        "apotheosis_of_the_mundane{level:1,description:\"PARTIAL. Track an ordinary action as a stat (e.g. steps). At a threshold, pulse walked_enough to unlock the supernatural version (DM grants the flag/ability).\",origin:\"\",proc:[{walked_enough:true}],reaction:None,name:\"Apotheosis of the Mundane\",uuid:\"tl-C58S\"}",
+        "statistical_outlier{level:1,description:\"NOT SUPPORTED. Needs to hook arbitrary event probabilities. Pure DM ruling.\",origin:\"\",proc:None,reaction:None,name:\"Statistical Outlier\",uuid:\"tl-aOyy\"}"
+      ],
+      "abilities": [
+        {
+          "name": "emotional_alchemy",
+          "level": 1,
+          "description": "FULLY SUPPORTED. Consume an emotion to gain a resource. Built: fear->speed. Same pattern: regret->mana, joy->health, envy->critical_scale.",
+          "cooldown": "0/3",
+          "cost": "[stat.fear(10)]",
+          "on_hit": "[stat.speed(10)]",
+          "origin": null,
+          "name": "Emotional Alchemy",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-imVx"
+        },
+        {
+          "name": "emotional_alchemy_regret",
+          "level": 1,
+          "description": "FULLY. Second variant of the same cost/on_hit pattern: regret -> mana.",
+          "cooldown": "0/3",
+          "cost": "[stat.regret(10)]",
+          "on_hit": "[stat.mana(10)]",
+          "origin": null,
+          "name": "Emotional Alchemy: Regret",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-CRZ2"
+        },
+        {
+          "name": "borrowed_tomorrow",
+          "level": 1,
+          "description": "FULLY (you were right). Reserve = max_mana mult -0.1; halt regen = mana_regen mult 0; burst = +30 mana - all via an on_hit function. Repaying restores the mults (DM, by fiction).",
+          "cooldown": "0/1",
+          "cost": "[]",
+          "on_hit": "[borrowed_tomorrow]",
+          "origin": null,
+          "name": "Borrowed Tomorrow",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-jaWB"
+        },
+        {
+          "name": "bureau_of_coincidences",
+          "level": 1,
+          "description": "PARTIAL. The luck cost is enforced; the converging coincidences are narrated by the DM.",
+          "cooldown": "0/4",
+          "cost": "[stat.luck(10)]",
+          "on_hit": null,
+          "origin": null,
+          "name": "Bureau of Coincidences",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-GaAG"
+        },
+        {
+          "name": "infinite_campfire",
+          "level": 1,
+          "description": "PARTIAL. Burning an item adds permanent heat (campfire_heat accumulates, never drops). DM removes the burned item and picks the value.",
+          "cooldown": "0/1",
+          "cost": null,
+          "on_hit": "[stat.campfire_heat(5)]",
+          "origin": null,
+          "name": "Infinite Campfire",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-Aomg"
+        },
+        {
+          "name": "paradox_engine",
+          "level": 1,
+          "description": "NOT SUPPORTED. Energy proportional to how impossible a contradiction is - unquantifiable. DM sets any gain by hand.",
+          "cooldown": null,
+          "cost": null,
+          "on_hit": null,
+          "origin": null,
+          "name": "Paradox Engine",
+          "damage": null,
+          "affinity": null,
+          "cast_type": null,
+          "uuid": "ab-cnJu"
+        }
+      ],
+      "effects": [
+        {
+          "repr": "deferred_consequences{duration:4,step:[-1],proc:[],reaction:[deferred_resolve],description:\"PARTIAL. Lasts ~30s (4 turns); on the last turn runs deferred_resolve. You append each stored consequence to that function during the window.\",name:\"Deferred Consequences\",uuid:\"ef-EoMi\"}",
+          "elapsed": 0,
+          "total": null
+        },
+        {
+          "repr": "echo_debt{duration:8,step:[],proc:[],reaction:None,description:\"PARTIAL. The 60s self-debuff as a timed effect. The ability-copy/delay/proximity core stays DM-run.\",name:\"Echo Debt (cost)\",uuid:\"ef-D0VE\"}",
+          "elapsed": 0,
+          "total": null
+        }
+      ],
+      "quests": []
+    }
+  }
+}

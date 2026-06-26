@@ -1,0 +1,2634 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>TTRPG</title>
+<style>
+  * { box-sizing: border-box; }
+  :root { --gold:#f5c542; --bg:#14161a; --panel:#1b1e24; --line:#2c313a; --ink:#d7dae0; --footerH:156px; }
+  /* BULLETPROOF dock: console is absolutely pinned to the bottom (fixed height); #app fills the
+     rest absolutely. No grid/flex track can collapse, so the console never floats. */
+body { margin: 0; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); position: relative; height: 100vh; overflow: hidden; }
+  /* hotkey letter (Warcraft style): the access key glows gold, rest stays default */
+  .hk { color: var(--gold); }
+  #app { position: absolute; top: 0; left: 0; right: 0; bottom: var(--footerH);
+         display: flex; flex-direction: column; overflow: hidden; }
+  #app.menu #topbar { display: none; }
+  #topbar { flex: none; display: flex; align-items: center; gap: 14px; padding: 8px 12px;
+            background: #1d2026; border-bottom: 1px solid var(--line); }
+  #topbar .navbtns { display: flex; gap: 8px; }
+  #topbar button { padding: 5px 11px; cursor: pointer; background: #21252c; color: var(--ink);
+                   border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  #topbar button:hover { border-color: #4c6286; } #topbar button:disabled { opacity: .4; cursor: default; }
+  #modebtn { width: 84px; text-align: left; }   /* fixed to just fit '🎭 Player' so toggling DM<->Player doesn't resize */
+  #labview { position: absolute; inset: 0; display: none; background: var(--bg); z-index: 5; }
+  #labview.on { display: block; } #labiframe { width: 100%; height: 100%; border: none; }
+  .labx { position: absolute; top: 8px; right: 12px; z-index: 6; width: 30px; height: 30px; border-radius: 7px;
+          background: #21252c; color: var(--ink); border: 1px solid var(--line); cursor: pointer; font-size: 14px; }
+  .labx:hover { border-color: #4c6286; }
+  #topbar kbd { font-size: 11px; color: #9aa3b2; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  #crumb { color: #9aa3b2; font-size: 13px; margin-left: auto; }
+  #screen { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+
+  /* MAIN MENU — two seamless full-bleed buttons, no borders */
+  .menu { position: absolute; inset: 0; display: grid; grid-template-rows: 1fr 1fr; }
+  .menu .slab { display: flex; align-items: center; justify-content: center; font-size: 64px; cursor: pointer;
+                color: #1b1e24; user-select: none; transition: filter .12s; }
+  .menu .slab:hover { filter: brightness(1.08); }
+  .menu .slab.players { background: #6f9ad6; } .menu .slab.world { background: #7fae6a; }
+  .menu .slab .hk { color: #fff; }
+
+  /* PLAYER PICKER */
+  .picker { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .picker .p { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 42px;
+               cursor: pointer; color: #14161a; }
+  .picker .p:hover { filter: brightness(1.08); }
+
+  /* PLAYER WHEEL */
+  /* the wheel FILLS the screen: viewBox is 100x100, scaled to COVER (slice) so wedges reach the edges */
+  .wheelwrap { position: absolute; inset: 0; overflow: hidden; }
+  #wheelsvg { width: 100%; height: 100%; display: block; }
+  .slice { cursor: pointer; transition: filter .1s; } .slice:hover { filter: brightness(1.12); }
+  .slabel { fill: #14161a; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+  .slabel .ttl { font: 600 4.4px ui-monospace, Menlo, monospace; } .slabel .hk { fill: var(--gold); }
+  .slabel .sub { font: 500 2.9px ui-monospace, Menlo, monospace; fill: #14161add; }
+  .clabel { fill: var(--ink); font: 600 5px ui-monospace, Menlo, monospace; text-anchor: middle; dominant-baseline: middle;
+            pointer-events: none; } .clabel .hk { fill: var(--gold); }
+
+  /* GENERIC SUB-PAGE / scroll surface */
+  .page { position: absolute; inset: 0; overflow: auto; padding: 14px 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; margin: 0 0 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 13px; color: #8ab4f8; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px; }
+  .kv span { color: #9aa3b2; } .kv b { color: #e8eaed; font-weight: 500; }
+  .pill { display: inline-block; background: #21252c; border: 1px solid var(--line); border-radius: 12px;
+          padding: 2px 9px; margin: 2px 3px 2px 0; }
+  .muted { color: #6b7280; }
+  .grid { display: grid; gap: 3px; }
+  .cell { border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; min-height: 46px; background: var(--panel); cursor: pointer; }
+  .cell:hover { border-color: #4c6286; } .cell .b { color: #9aa3b2; font-size: 11px; } .cell .o { font-size: 18px; }
+
+  /* INVENTORY */
+  .invgrid { display: grid; grid-template-columns: 600px 1fr; gap: 12px; align-items: start; }
+  .zone { border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; max-height: 168px; overflow: auto; }
+  .zone h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .zone.armor { background: #3a3d44; } .zone.accessories { background: #4a3a57; } .zone.clothing { background: #57502f; }
+  .slotrow { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  /* body-coverage: an editable 00% field + a proportion bar, left of each slot (sized for "100%", no slack) */
+  .covcell { flex: none; width: 64px; }
+  .covtop { display: flex; align-items: baseline; gap: 4px; }
+  .covinput { width: 34px; flex: none; background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+              border-radius: 4px; padding: 1px 3px; font: inherit; font-size: 11px; text-align: right; }
+  .covinput:focus { border-color: #6a8fd8; outline: none; }
+  .covper { font-size: 10px; color: #8a93a2; white-space: nowrap; }
+  .covbar { width: 100%; height: 5px; margin-top: 2px; background: #2c313a; border-radius: 3px; overflow: hidden; }
+  .covfill { height: 100%; background: #6a8fd8; }
+  .zonetot { font-weight: 400; text-transform: none; letter-spacing: 0; color: #8a93a2; }
+  .zonetot.bad { color: #e0a04a; }
+  .slotrow label { width: 120px; flex: none; color: #cfd3da; } .slotrow select { flex: 1; background: var(--bg); color: var(--ink);
+            border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; font: inherit; }
+  /* equipment chips scroll horizontally instead of stacking into a tall block (e.g. many rings) */
+  .slotrow .chips { flex: 1; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+  .slotrow .chip { flex: none; }
+  .radars { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 8px; }
+  .radar { border-radius: 8px; padding: 6px; } .radar .t { font-size: 12px; margin-bottom: 2px; color:#222; }
+  .flatbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .flatbox .kv b { color: var(--gold); }
+  .itemgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px,72px)); gap: 8px; }
+  .itembox { height: 72px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+             display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+  .itembox:hover { border-color: #4c6286; } .itembox .em { font-size: 30px; } .itembox .n { font-size: 10px; color:#9aa3b2; }
+  .itembox.add { font-size: 34px; color: var(--gold); }
+  /* item editor top: fields left, shape editor top-right */
+  .ietop { display: flex; gap: 18px; align-items: flex-start; }
+  .ietop .ieleft { flex: 1; min-width: 0; }
+  .ietop .ieright { flex: none; width: 240px; }
+  /* item shape editor */
+  .shgrid { display: grid; gap: 3px; }
+  .shcell { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line);
+            background: #1b1f26; cursor: pointer; }
+  .shcell:hover { border-color: #4c6286; }
+  .shcell.on { background: #3f7d52; border-color: #5bbd7a; }
+  .shcell.ctr.on { background: #5bbd7a; box-shadow: inset 0 0 0 2px #2c5e3c; }
+  .shcell.ctr:not(.on) { border-color: #5b7d6a; }
+  /* grid inventory */
+  .invwrap { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .invcontainer { border: 2px solid #6f8fae; padding: 10px 12px 12px; }
+  .invhead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+  .invhead .ctool { cursor: pointer; color: var(--gold); margin-left: auto; }
+  .invhead .ctool:hover { filter: brightness(1.3); }
+  .invgridwrap { position: relative; overflow: hidden; }
+  .gcell { position: absolute; border-radius: 4px; background: #00000033; border: 1px solid #ffffff14; }
+  .gitem { position: absolute; cursor: grab; z-index: 2; }
+  .gitem:active { cursor: grabbing; }
+  .gicell { position: absolute; border-radius: 4px; background: #c9a24a55; border: 1px solid var(--gold); }
+  .giem { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+          font-size: 20px; pointer-events: none; }
+  .invghost { position: fixed; pointer-events: none; z-index: 9999; opacity: 0.75; }
+  .invghost .gicell { background: #5bbd7a66; border-color: #5bbd7a; }
+  .loosebin { margin-top: 12px; border: 1px dashed #4c6286; border-radius: 8px; padding: 8px 10px; }
+  .loosebin h4 { margin: 0 0 8px; font-size: 12px; }
+  .itembox.shaped { border-style: dashed; cursor: grab; }
+  .contedit { position: fixed; inset: 0; background: #000a; display: none; align-items: center;
+              justify-content: center; z-index: 10000; }
+  .contbox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+             padding: 18px 20px; max-width: 520px; max-height: 86vh; overflow: auto; }
+
+  /* ITEM EDITOR */
+  .editor { max-width: 760px; } .editor .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .editor label.f { width: 120px; color: #9aa3b2; }
+  .editor input, .editor select, .editor textarea { background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+            border-radius: 5px; padding: 4px 7px; font: inherit; }
+  .editor input[type=text], .editor textarea { flex: 1; } .editor textarea { min-height: 34px; resize: vertical; }
+  .sub { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+  .sub h4 { margin: 0 0 6px; font-size: 12px; color: #8ab4f8; }
+  .todo { border-left: 3px solid #b5803f; } .todo h4 { color: #d9a441; }
+  .hint { color: #6b7280; font-size: 12px; }
+  /* clickable chips (replace the tiny checkboxes — whole chip toggles) */
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 16px; cursor: pointer;
+          border: 1px solid var(--line); background: #20242b; user-select: none; }
+  .chip .box { width: 15px; height: 15px; border: 1px solid #6b7280; border-radius: 4px; flex: none; }
+  .chip:hover { border-color: #4c6286; } .chip.on { border-color: var(--gold); background: #2a2e25; }
+  .chip.on .box { background: var(--gold); border-color: var(--gold); }
+  .chip.cat-armor { color: #c8ccd2; } .chip.cat-accessories { color: #c9a7e6; } .chip.cat-clothing { color: #e6d27a; }
+  .chip.full { opacity: .4; cursor: default; }   /* candidate that can't be equipped — slot at capacity */
+  /* right-aligned label/value stat grid */
+  .statgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 14px; }
+  .statgrid .sg { display: grid; grid-template-columns: 1fr 92px; align-items: center; gap: 8px; }
+  .statgrid .sg label { text-align: right; color: #9aa3b2; } .statgrid .sg input { width: 92px; }
+  .warn { color: #e06c6c; font-size: 12px; }
+  /* STATS TAB — base × mult + flat, each editable by a tiny delta box under its current value */
+  .stattab { display: flex; flex-direction: column; gap: 2px; }
+  .statrow { display: grid; grid-template-columns: 210px 64px 14px 64px 14px 64px 18px 72px 1fr;
+             align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid #20242b; }
+  .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .statrow.sthead { color: #9aa3b2; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; border: none; }
+  .statrow.sthead > div { text-align: center; }
+  .sname { color: #cfd3da; }
+  .sfield { display: flex; flex-direction: column; gap: 1px; }
+  .sval { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; text-align: right; }
+  .sdelta { width: 100%; height: 15px; font: 11px ui-monospace, Menlo, monospace; padding: 0 4px; text-align: right;
+            background: var(--bg); color: #9aa3b2; border: 1px solid var(--line); border-radius: 3px; }
+  .sdelta:focus { color: var(--ink); border-color: #4c6286; outline: none; }
+  .sop { text-align: center; color: #6b7280; } .scomp { color: var(--gold); text-align: right; font-weight: 600; }
+  .sformula { color: #9aa3b2; font-size: 11px; font: inherit; background: transparent; border: 1px solid transparent;
+              border-radius: 5px; padding: 3px 6px; min-width: 0; width: 100%; }
+  .sformula:hover { border-color: var(--line); } .sformula:focus { outline: none; border-color: #4c6286; background: var(--bg); color: var(--ink); }
+  /* add-stat row (stats tab) + the "+ new X" chip (talents/effects/abilities lists) */
+  .addstat { display: flex; gap: 6px; margin-bottom: 10px; }
+  .addstat input { flex: 1; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font: inherit; }
+  .addstat input:first-of-type { flex: 0 0 160px; }
+  .addchip { display: inline-block; cursor: pointer; padding: 6px 12px; border-radius: 16px; border: 1px dashed #4c6286;
+             color: var(--gold); user-select: none; } .addchip:hover { background: #20242b; }
+  /* quest progress elements (objectives) — on the card */
+  .qobjs { margin-top: 8px; border-top: 1px solid #262b33; padding-top: 6px; }
+  .qobjhead { font-size: 11px; color: #9aa3b2; margin-bottom: 4px; }
+  .qobj { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .qobj.qdone .qobl { color: #81c784; }
+  .qobl { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qbin { flex: none; width: 20px; height: 20px; border: 1px solid #4c6286; border-radius: 5px; background: #1b1e24;
+          color: #81c784; font-size: 13px; line-height: 18px; text-align: center; cursor: pointer; }
+  .qbin.on { background: #243a26; border-color: #4f8a52; }
+  .qbar { flex: none; width: 150px; height: 16px; border: 1px solid #3a4150; border-radius: 5px; background: #1b1e24;
+          cursor: pointer; overflow: hidden; display: flex; }
+  .qsegbar .qseg { flex: 1; border-right: 1px solid #3a4150; }
+  .qsegbar .qseg:last-child { border-right: none; }
+  .qsegbar .qseg.on { background: #3f6ea5; }
+  .qpctbar { position: relative; }
+  .qpctbar .qfill { height: 100%; background: #3f8a63; }
+  .qnum { flex: none; width: 44px; text-align: right; font-size: 12px; color: #c4c9d2; }
+  /* quest objectives BUILDER (editor) */
+  .qbuilder { border: 1px solid #2c313a; border-radius: 8px; padding: 8px 10px; margin: 4px 0; background: #16191e; }
+  .qbhead { font-size: 13px; color: #cdd3dc; margin-bottom: 6px; display: flex; gap: 10px; align-items: baseline; }
+  .qbrow { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+  .qbtype { flex: none; width: 116px; }
+  .qblabel { flex: 2; min-width: 0; }
+  .qbgoal { flex: none; width: 64px; }
+  .qbgoalsp { flex: none; width: 64px; font-size: 11px; color: #6f7785; text-align: center; }
+  .qbproc { flex: 2; min-width: 0; }
+  .qbdel { flex: none; width: 26px; height: 26px; border-radius: 6px; border: 1px solid #5a3a3a; background: #2a1e1e;
+           color: #e07a7a; cursor: pointer; }
+  .qbuilder input, .qbuilder select { background: #1b1e24; color: var(--ink); border: 1px solid var(--line);
+           border-radius: 6px; padding: 4px 6px; font: inherit; }
+  /* quests list */
+  .questlist { display: flex; flex-direction: column; gap: 3px; }
+  .questrow { display: grid; grid-template-columns: 28px 200px 1fr; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid #20242b; }
+  .qbtn { width: 24px; height: 24px; border-radius: 6px; border: 1px solid #4c6286; background: #21252c; color: var(--gold); cursor: pointer; }
+  .qbtn:hover { background: #2a2e25; }
+  .elbtn { width: 24px; height: 24px; padding: 0; border-radius: 6px; cursor: pointer; font-size: 12px;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+  .elbtn.edit:hover { border-color: #6a8fd8; color: #8ab4f8; }
+  .elbtn.done:hover { border-color: #2e7d32; color: #81c784; }
+  .elbtn.del:hover { border-color: #c0392b; color: #e88; }
+  .qname { color: #cfd3da; } .qdesc { color: #9aa3b2; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ABILITY CARDS */
+  .ability-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin-top: 8px; }
+  .ability-card { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+  .ability-card.granted { border-color: #5a6a45; background: #191d18; }   /* conferred by a held/worn item */
+  .grantbadge { font-size: 10px; color: #a7c957; border: 1px solid #5a6a45; border-radius: 4px; padding: 1px 6px;
+                white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
+  .igtrig { flex: none; width: 116px; } .igkind { flex: none; width: 84px; } .igspec { flex: 2; min-width: 0; }
+  .ab-name { font-weight: 600; color: #e8eaed; } .ab-lvl { font-size: 11px; color: #9aa3b2; margin-left: 6px; }
+  .ab-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .ab-head .ab-name { flex: 1; min-width: 0; }              /* title wraps; never pushes the buttons */
+  .ab-btns { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
+  .ab-sub { margin: 1px 0 5px; }   /* identifier subtitle on its own line (frees the title row) */
+  .ab-sub .ab-id, .ab-sub .ab-lvl { margin-left: 0; margin-right: 8px; }
+  .ab-desc { color: #9aa3b2; font-size: 12px; margin: 3px 0 6px; }
+  .ab-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .abtag { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid; white-space: nowrap; }
+  .abt-cast  { border-color: #6a8fd8; color: #8ab4f8; background: #1c2540; }
+  .abt-cd    { border-color: #6b7280; color: #9aa3b2; background: #1e2128; }
+  .abt-cost  { border-color: #b5803f; color: #d9a441; background: #28200e; }
+  .abt-aff   { border-color: #6a4fb5; color: #b9a8d8; background: #1e1630; }
+  .abt-dmg   { border-color: #c0392b; color: #e88;    background: #2a1212; }
+  .abt-hit   { border-color: #2e7d32; color: #81c784; background: #0d200e; }
+  .abt-misc  { border-color: var(--line); color: #9aa3b2; background: var(--bg); }
+  .ab-id { font-size: 11px; color: #6b7280; margin-left: 6px; font-family: ui-monospace, Menlo, monospace; }
+  .ab-uuid { font-size: 10px; color: #6b7280; font-family: ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .flagrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .flagctl { display: inline-flex; align-items: center; gap: 4px; flex: none; border: 1px solid var(--line); border-radius: 8px; padding: 3px 4px 3px 8px; }
+  .flagctl .flagname { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #9aa3b2; margin-right: 2px; }
+  .flagctl .flagname.fon { color: #81c784; }
+  .flagctl .flagname::before { content: "● "; color: transparent; }   /* dot space reserved always (no shift on toggle) */
+  .flagctl .flagname.fon::before { color: #81c784; }
+  .flagctl button { flex: none; white-space: nowrap; font-size: 11px; padding: 2px 7px; border-radius: 6px;
+     cursor: pointer; background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+  .flagctl button:hover { background: #20242b; border-color: #4c6286; }
+  .flaglist { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .flagentry { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .flagconns { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+  .flagconn { font-size: 12px; color: #9aa3b2; border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; }
+  .flagconn b { color: #8ab4f8; font-weight: 600; }
+  /* functions folder tree */
+  .fntreebox { margin-top: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .fnrow { display: flex; align-items: center; gap: 10px; padding: 2px 0; }
+  .fnrow:hover { background: #1b1e24; }
+  .fnbtns { flex: 0 0 auto; width: 84px; display: flex; gap: 4px; }            /* fixed left column -> buttons stay aligned */
+  .fnspacer { display: inline-block; width: 84px; }
+  .fnbtns .fnbtn { width: 24px; height: 22px; padding: 0; border-radius: 5px; cursor: pointer; font-size: 12px;
+           background: var(--bg); color: var(--ink); border: 1px solid var(--line); }   /* tree icon buttons only */
+  .fnbtns .fnbtn.run:hover { border-color: #2e7d32; color: #81c784; }
+  .fnbtns .fnbtn.edit:hover { border-color: #6a8fd8; color: #8ab4f8; }
+  .fnbtns .fnbtn.del:hover { border-color: #c0392b; color: #e88; }
+  .fntree { white-space: pre; color: #e8eaed; }
+  .fgbar { color: #4c5564; }
+  .fndelim { color: #6b7280; }
+  .fnseg.fnfolder { color: #9aa3b2; }
+  /* function editor: numbered-rows document */
+  .fneditor .fnpath { width: 100%; box-sizing: border-box; font: 13px ui-monospace, Menlo, monospace;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 7px 9px; }
+  .fndoc { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin: 8px 0; background: var(--bg); }
+  .fngutter { flex: 0 0 auto; min-width: 34px; text-align: right; padding: 8px 8px 8px 6px; color: #4c5564;
+     white-space: pre; overflow: hidden; user-select: none; font: 13px/1.5 ui-monospace, Menlo, monospace; border-right: 1px solid var(--line); }
+  .fnbodyta { flex: 1; min-height: 260px; resize: vertical; border: 0; outline: none; padding: 8px 10px;
+     background: var(--bg); color: var(--ink); font: 13px/1.5 ui-monospace, Menlo, monospace; }
+  .fneditor { position: relative; }                       /* positioning context for the autofill popup */
+  .fngutter .fnln { cursor: pointer; }                    /* click a number to select that whole line */
+  .fngutter .fnln:hover { color: var(--gold); background: #ffffff14; }
+  .fnac { position: absolute; z-index: 60; display: none; min-width: 150px; max-height: 180px; overflow: auto;
+     background: var(--panel); border: 1px solid #3a4150; border-radius: 5px; box-shadow: 0 6px 18px #0008; font-size: 13px; }
+  .fnac div { padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+  .fnac div:hover, .fnac div.sel { background: #314056; }
+  .fnbtn { display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; white-space: nowrap;
+           font-size: 12px; padding: 3px 9px; border-radius: 6px; cursor: pointer; background: #21252c;
+           color: var(--ink); border: 1px solid var(--line); font: inherit; }
+  .fnbtn:hover { border-color: #4c6286; } .fnbtn.fndel:hover { border-color: #c0392b; color: #e88; }
+  .multipulsebar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .mpchk { width: 15px; height: 15px; cursor: pointer; flex: none; }
+  .fnbtn.on { border-color: var(--gold); color: var(--gold); }
+  /* ATLAS */
+  .atlaspage { padding: 12px 14px; }
+  .atlasbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  .atlasgroup { display: inline-flex; align-items: center; gap: 6px; }
+  .atlaslbl { color: #6b7280; margin-right: 2px; }
+  .atlasbar .fnbtn { white-space: nowrap; }
+  .atlasmode { font-size: 12px; margin-bottom: 12px; }
+  .atlasgrid { display: inline-block; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #0c0d10; }
+  .arow { display: flex; }
+  .acell { position: relative; width: 60px; height: 60px; box-sizing: border-box;
+           border-right: 1px solid #0008; border-bottom: 1px solid #0008; cursor: default; overflow: hidden; }
+  .acell.avoid { background: transparent !important; border-color: transparent; }
+  .acell.afog { background: #0c0d10 !important; }
+  .acell.apaint { cursor: crosshair; }
+  .acell.adim { filter: brightness(0.45) saturate(0.5); }      /* peripheral: 1 tile from the player, not yet entered */
+  .acell:hover { outline: 2px solid var(--gold); outline-offset: -2px; z-index: 2; }
+  .aweather { position: absolute; inset: 0; opacity: 0.4; pointer-events: none; }
+  .abio { position: absolute; top: 1px; left: 2px; font-size: 15px; line-height: 1; filter: drop-shadow(0 1px 1px #0009); }
+  .aw  { position: absolute; top: 1px; right: 2px; font-size: 12px; line-height: 1; }
+  .astruct { position: absolute; bottom: 1px; right: 3px; font-size: 11px; color: #f1e4c0; text-shadow: 0 1px 2px #000; }
+  .aents { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 1px; flex-wrap: wrap; }
+  .adot { font-size: 15px; line-height: 1; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  .adot.a-player { color: #ffffff; } .adot.a-npc { color: #ffe08a; } .adot.a-mob { color: #ff8a8a; }
+  .atlastip { position: fixed; display: none; z-index: 9999; pointer-events: none; max-width: 280px;
+              background: var(--panel); border: 1px solid #4c6286; border-radius: 7px; padding: 7px 10px;
+              font-size: 12px; line-height: 1.5; box-shadow: 0 6px 20px #000a; }
+  /* storyline */
+  .storyhead { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+  .storyadd { display: flex; gap: 8px; align-items: flex-start; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 12px; }
+  .storyturn { flex: 0 0 auto; font-size: 12px; color: #9aa3b2; white-space: nowrap; padding-top: 4px; }
+  .storyta { flex: 1; width: 100%; min-height: 56px; resize: vertical; box-sizing: border-box; font: inherit;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  .storynote textarea { min-height: 90px; }   /* notes get more room */
+  .storylist { display: flex; flex-direction: column; gap: 8px; }
+  .storyrow { display: flex; gap: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); align-items: flex-start; }
+  .storyrow.editing { flex-wrap: wrap; }
+  .storyrow .storyturn { flex: 0 0 70px; font-weight: 600; color: #8ab4f8; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding-top: 0; }
+  .storytext { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
+  .storytext .md-h1 { font-size: 17px; font-weight: 700; margin: 2px 0; }
+  .storytext .md-h2 { font-size: 15px; font-weight: 700; color: #cdd3dc; }
+  .storytext .md-h3 { font-size: 14px; font-weight: 600; color: #9aa3b2; }
+  .storytext .md-li { margin-left: 6px; } .storytext .md-sp { height: 8px; }
+  .storyacts { display: flex; gap: 5px; }
+  .storynotes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .storynote label { display: block; font-size: 12px; color: #9aa3b2; margin-bottom: 4px; }
+  @media (max-width: 620px) { .storynotes { grid-template-columns: 1fr; } }
+  /* help / formatting reference — floats as an overlay over #app (console stays usable below) */
+  .helpov { position: fixed; top: 0; left: 0; right: 0; bottom: var(--footerH); z-index: 60;
+            display: none; overflow: auto; background: rgba(8,9,12,.86); }
+  .helpov.show { display: block; }
+  .helppanel { position: relative; max-width: 900px; margin: 22px auto; background: var(--panel);
+               border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; }
+  .helpclose { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; cursor: pointer;
+               background: #21252c; color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+               font-size: 15px; line-height: 1; }
+  .helpclose:hover { border-color: #4c6286; }
+  .helpdoc { max-width: 840px; margin: 0 auto; font-size: 14px; line-height: 1.55; }
+  .helpdoc .md-h1 { font-size: 21px; font-weight: 800; color: #8ab4f8; margin: 24px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+  .helpdoc .md-h2 { font-size: 16px; font-weight: 700; color: #cdd3dc; margin: 16px 0 4px; }
+  .helpdoc .md-h3 { font-size: 14px; font-weight: 600; color: #9aa3b2; margin: 10px 0 2px; }
+  .helpdoc .md-li { margin: 2px 0 2px 12px; color: #c4c9d2; }
+  .helpdoc .md-sp { height: 8px; }
+  .helpdoc code { font-family: ui-monospace, Menlo, monospace; font-size: .9em; color: var(--gold);
+     background: #1c2027; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .helpdoc .md-pre { background: #15181d; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+     overflow-x: auto; font: 13px/1.5 ui-monospace, Menlo, monospace; color: #cdd3dc; white-space: pre; margin: 6px 0; }
+  /* calendar */
+  .calbar { display: flex; align-items: center; gap: 16px; margin: 4px 0 12px; }
+  .dayclock svg { width: 84px; height: 84px; }
+  .cface { fill: #15181d; stroke: #2a2f38; stroke-width: 1.2; }
+  .ctick { stroke: #4c5564; stroke-width: 1.4; } .ctick.con { stroke: var(--gold); stroke-width: 2.2; }
+  .cnum { fill: #6b7280; font: 6px ui-monospace, Menlo, monospace; text-anchor: middle; } .cnum.con { fill: var(--gold); font-weight: 700; }
+  .chand { stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; } .chub { fill: var(--gold); }
+  .caldateline { display: flex; align-items: center; gap: 8px; }
+  .caldatebtn { width: 24px; height: 24px; padding: 0; font-size: 13px; border-radius: 6px; cursor: pointer;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+  .caldatebtn:hover { border-color: #4c6286; }
+  .calmeta .calmonth { font-size: 16px; color: #8ab4f8; font-weight: 600; }
+  .calzoom { margin-left: 8px; font-size: 11px; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+     background: var(--bg); color: var(--gold); border: 1px solid #4c6286; }
+  .calzoom:hover { background: #20242b; }
+  .dateset { margin: 6px 0; font-size: 12px; color: #9aa3b2; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .dateset .dsi { width: 42px; font: 12px ui-monospace, Menlo, monospace; background: var(--bg); color: var(--ink);
+     border: 1px solid var(--line); border-radius: 5px; padding: 2px 5px; }
+  .dssep { color: #4c5564; }
+  .calmonthnav { display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; }
+  .calmonthttl { font-size: 14px; color: #e8eaed; font-weight: 600; min-width: 200px; text-align: center; }  /* fixed width so the › arrow never jumps */
+  .cnav { width: 26px; height: 24px; padding: 0; border-radius: 6px; cursor: pointer; font-size: 14px;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+  .cnav:hover:not(:disabled) { border-color: #4c6286; } .cnav:disabled { opacity: .35; cursor: default; }
+  .notecreate { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-bottom: 1px solid var(--line); background: #16181d; }
+  .notecreate .addturn { font-size: 10px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 1px 3px; }
+  .notecreate .noteinput { flex: 1; }
+  .calyear { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+  .calmonthcard { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px 10px; cursor: pointer; }
+  .calmonthcard:hover { border-color: #4c6286; background: #1b1e24; }
+  .calmonthcard.curmonth { border-color: #4c6286; box-shadow: 0 0 0 1px #4c628655 inset; }
+  .cmc-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .cmc-name { font-weight: 600; color: #e8eaed; } .cmc-len { font-size: 11px; color: #6b7280; }
+  .cmc-ev { color: var(--gold); }
+  .cmc-dots { display: flex; flex-wrap: wrap; gap: 2px; }
+  .mday { width: 6px; height: 6px; border-radius: 1px; background: #2a2f38; }
+  .mday.has { background: var(--gold); } .mday.mtoday { outline: 1px solid #8ab4f8; outline-offset: 0; }
+  .callegend { display: flex; gap: 6px; margin-top: 6px; }
+  .calgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .calday { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
+  .calday.today { border-color: #4c6286; box-shadow: 0 0 0 1px #4c628655 inset; }
+  .calday-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  .cdaynum { font-weight: 700; color: #e8eaed; font-size: 13px; }
+  .calplus { width: 20px; height: 20px; padding: 0; border-radius: 5px; cursor: pointer; font-size: 13px; line-height: 1;
+     background: var(--bg); color: var(--gold); border: 1px dashed #4c6286; }
+  .calplus:hover { background: #20242b; }
+  .calallday { padding: 4px 6px; display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 1px solid var(--line); }
+  .calday-body { max-height: 168px; overflow-y: auto; padding: 2px 4px; }
+  .calturn { display: flex; align-items: flex-start; gap: 5px; padding: 2px 2px; border-bottom: 1px dotted #20242b; min-height: 18px; }
+  .calturn.curturn { background: #1c2540; }
+  .ctk { flex: 0 0 14px; text-align: right; color: #4c5564; font: 10px ui-monospace, Menlo, monospace; padding-top: 2px; }
+  .pawns { flex: 0 0 auto; display: flex; gap: 1px; font: 11px ui-monospace, Menlo, monospace; color: #e8eaed; }
+  .pawn { display: inline-block; min-width: 11px; text-align: center; background: #2a2f38; border-radius: 3px; padding: 0 1px; }
+  .cevs { flex: 1; display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+  .calev { font-size: 10px; padding: 1px 5px; border-radius: 8px; border: 1px solid; white-space: nowrap; }
+  .ev-effect { border-color: #6a8fd8; color: #8ab4f8; background: #1c2540; }
+  .ev-quest  { border-color: #b5803f; color: #d9a441; background: #28200e; }
+  .ev-note   { border-color: #2e7d32; color: #81c784; background: #0d200e; }
+  .calev.editable { cursor: pointer; }
+  .calev.editable:hover { border-color: #81c784; background: #123516; box-shadow: 0 0 0 1px #2e7d3255; }
+  .noteedit { display: inline-flex; align-items: center; gap: 2px; }
+  .noteinput { width: 96px; font: 10px ui-monospace, Menlo, monospace; background: var(--bg); color: var(--ink);
+     border: 1px solid #2e7d32; border-radius: 6px; padding: 1px 5px; }
+  .nbtn { font-size: 10px; line-height: 1; padding: 2px 4px; border-radius: 5px; cursor: pointer;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+  .nbtn.save:hover { border-color: #2e7d32; color: #81c784; }
+  .nbtn.ndel:hover { border-color: #c0392b; color: #e88; }
+  .nbtn.ncancel:hover { border-color: #6b7280; color: #9aa3b2; }
+  /* full-page element editor: rows of flex-weighted label+control cells */
+  .eled .elrow { display: flex; gap: 12px; margin: 10px 0; align-items: flex-end; }
+  .eled .elcell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .eled .elcell label { color: #9aa3b2; font-size: 11px; }
+  .eled .elcell input, .eled .elcell textarea { width: 100%; box-sizing: border-box; font: inherit;
+     background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 7px 9px; }
+  .eled .elcell textarea { resize: vertical; line-height: 1.4; }
+  .eled .elactions { display: flex; gap: 12px; align-items: center; margin-top: 14px; }
+  #el_hooksbox { border: 1px solid var(--line); border-radius: 7px; padding: 8px; background: #16181d; }
+  .hookchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .hookchip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 8px; border-radius: 13px;
+              background: #243047; border: 1px solid #3a4f73; }
+  .hookchip .x { cursor: pointer; opacity: .6; font-weight: 700; } .hookchip .x:hover { opacity: 1; }
+  .hookadd { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+  #el_hookpick { background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px; font: inherit; }
+
+  /* CONSOLE — absolutely pinned to the bottom, fixed height (--footerH) */
+  footer { position: absolute; left: 0; right: 0; bottom: 0; height: var(--footerH); overflow: visible;
+           border-top: 1px solid var(--line); background: #1d2026; padding: 8px 12px; }
+  footer .lbl { color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  .conhdr { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .conicon { margin-left: auto; padding: 1px 8px; cursor: pointer; background: #21252c; color: #9aa3b2;
+             border: 1px solid var(--line); border-radius: 5px; font: inherit; line-height: 1.3; }
+  .conicon:hover { border-color: #4c6286; color: var(--ink); }
+  body.confull .conicon { color: var(--gold); border-color: var(--gold); }
+  /* fullscreen console: the footer fills the viewport (covers #app) and the log grows to fill it */
+  body.confull footer { top: 0; height: auto; z-index: 60; }
+  body.confull #log { height: calc(100vh - 96px); }
+  #log { height: 84px; overflow: auto; white-space: pre-wrap; color: #aab; background: var(--bg);
+         border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; }
+  #cmdrow { position: relative; display: flex; gap: 6px; }
+  #cmd { flex: 1; padding: 7px 9px; background: var(--bg); color: #e8eaed; border: 1px solid #3a4150; border-radius: 5px;
+         font: inherit; resize: none; height: 34px; line-height: 1.4; overflow: auto; white-space: pre; }
+  /* multi-line: Enter runs ALL lines, Shift+Enter inserts a newline. Bump --footerH + #cmd height to see more at once. */
+  #ac { position: absolute; bottom: 38px; left: 0; right: 60px; background: var(--panel); border: 1px solid #3a4150;
+        border-radius: 5px; max-height: 180px; overflow: auto; display: none; z-index: 9999; }
+  #ac div { padding: 4px 9px; cursor: pointer; } #ac div:hover, #ac div.sel { background: #314056; }
+  button.go { padding: 7px 14px; background: #314056; color: #e8eaed; border: 1px solid #4c6286; border-radius: 5px; cursor: pointer; }
+</style></head>
+<body>
+  <div id="app">
+    <div id="topbar">
+      <div class="navbtns">
+        <button id="backbtn" onclick="back()">‹ back<kbd>esc</kbd></button>
+        <button onclick="home()">⌂ menu<kbd>`</kbd></button>
+        <button onclick="openHelp()" title="formatting reference">? help<kbd>?</kbd></button>
+        <button onclick="openLab()" title="Hook &amp; Function Lab">🧪 Lab</button>
+        <button id="modebtn" onclick="toggleMode()" title="DM / Player view — Player can't see fogged cells or DM notes">👑 DM</button>
+      </div>
+      <div id="crumb"></div>
+    </div>
+    <div id="screen"></div>
+    <div id="labview"><button class="labx" onclick="closeLab()" title="close lab (Esc)">✕</button><iframe id="labiframe"></iframe></div>
+  </div>
+  <footer>
+    <div class="conhdr">
+      <span class="lbl">console</span>
+      <button id="confullbtn" class="conicon" onclick="toggleConsoleFull()" title="fullscreen console (⌘/ · Esc to exit)">⛶</button>
+    </div>
+    <div id="log"></div>
+    <div id="cmdrow">
+      <div id="ac"></div>
+      <textarea id="cmd" rows="1" autocomplete="off" placeholder="/command …  (Enter runs · Shift+Enter newline · Tab completes · ` menu)"></textarea>
+      <button class="go" onclick="runCmd()">Run</button>
+    </div>
+  </footer>
+
+  <!-- help is an OVERLAY, not a screen: it floats over whatever you're doing (editing an item,
+       writing a function…) without rebuilding #screen, so your in-progress entries survive. -->
+  <div id="helpov" class="helpov" onclick="if(event.target===this)closeHelp()">
+    <div class="helppanel">
+      <button class="helpclose" onclick="closeHelp()" title="close (Esc)">✕</button>
+      <div class="helpdoc" id="helpbody"><span class="muted">loading reference…</span></div>
+    </div>
+  </div>
+
+<script>
+let STATE = null;
+// ---- navigation state machine ------------------------------------------------
+// NAV.stack is the breadcrumb; NAV.cur is the current screen. ` -> menu, Esc -> back.
+const NAV = { stack: [], cur: {kind: "menu"} };
+let KEYMAP = {};   // per-screen single-key -> action, rebuilt on every render
+let ADD_ACTION = null;   // the current screen's "+" action; fired by pressing '=' (shift+= / plus)
+let EDIT_NOTE = null;    // id of the calendar note currently being edited inline (null = none)
+let CAL_VIEW = null;     // {mode:'month'|'year', month:1..14} — calendar view (null until first render)
+let CAL_ADD = null;      // {month, day} the inline note-creator is open on (null = none)
+let CAL_DATESET = false;  // is the date-setter panel open?
+let STORY_DESC = false;  // storyline sort: newest-first?
+let STORY_EDIT = null;   // id of the storyline entry being edited inline (null = none)
+let MODE = "dm";         // "dm" sees everything; "player" hides fogged cells + DM notes
+let ATLAS_OPT = {weather: true, structures: true, entities: true};  // atlas layer toggles
+let ATLAS_DATA = null;   // last-rendered atlas lookups, for hover tooltips
+const WEATHER_GLYPH = {clear: "☀️", cloudy: "☁️", drizzle: "🌦️", rain: "🌧️", storm: "⛈️",
+  fog: "🌫️", windy: "💨", snow: "🌨️", hail: "🧊", heatwave: "🥵"};
+const WEATHER_TINT = {drizzle: "#4a7a9a", rain: "#2f5f93", storm: "#3a2c63", snow: "#cfe2f2",
+  hail: "#9fc0d8", fog: "#6b7280", cloudy: "#5b6470", windy: "#6a8a7a", heatwave: "#b5651d"};
+const ENT_DOT = {player: "●", npc: "◆", mob: "▲"};
+let ATLAS_VIEW = null;   // selected viewpoint player — drives whose fog + allegiance colors the atlas shows
+let ATLAS_PAINT = null;  // "reveal"|"dim"|"hide" — click-to-paint the viewpoint player's fog
+const ALLEGIANCE_COLOR = {ally: "#81c784", neutral: "#e0c878", hostile: "#e07a7a"};
+function toggleMode() {
+  MODE = MODE === "dm" ? "player" : "dm";
+  const b = document.getElementById("modebtn");
+  if (b) b.textContent = MODE === "dm" ? "👑 DM" : "🎭 Player";
+  render();
+}
+
+// the Lab (Hook + Function) is its OWN page (hook.html), shown in a persistent iframe so switching
+// away and back never reloads it (no lost work). Same-origin, so it reads /state and POSTs /cmd itself.
+function openLab() { const f = document.getElementById("labiframe"); if (!f.getAttribute("src")) f.src = "/hook.html"; document.getElementById("labview").classList.add("on"); }
+// open the Lab pre-scoped to an element's context (so ＋attach makes a matching hook for THIS editor)
+function openLabFor(kind) {
+  const f = document.getElementById("labiframe"), apply = () => { try { f.contentWindow.setLabContext(kind); } catch (e) {} };
+  if (!f.getAttribute("src")) { f.src = "/hook.html"; f.addEventListener("load", apply, {once: true}); } else apply();
+  document.getElementById("labview").classList.add("on");
+}
+function closeLab() { document.getElementById("labview").classList.remove("on"); }
+function labOpen() { return document.getElementById("labview").classList.contains("on"); }
+function go(screen) { closeLab(); NAV.stack.push(NAV.cur); NAV.cur = screen; render(); }
+function replace(screen) { closeLab(); NAV.cur = screen; render(); }
+function back() { closeLab(); if (NAV.stack.length) { NAV.cur = NAV.stack.pop(); render(); } }
+function home() { closeLab(); NAV.stack = []; NAV.cur = {kind: "menu"}; render(); }
+
+// ---- hotkey-label helpers (gold access letter) -------------------------------
+function hkHTML(label, key) {
+  const i = label.toLowerCase().indexOf(key.toLowerCase());
+  if (i < 0) return label + ` <span class="hk">(${key})</span>`;
+  return label.slice(0, i) + `<span class="hk">${label[i]}</span>` + label.slice(i + 1);
+}
+function hkSVG(label, key) {
+  const i = label.toLowerCase().indexOf(key.toLowerCase());
+  if (i < 0) return label;
+  return label.slice(0, i) + `<tspan class="hk">${label[i]}</tspan>` + label.slice(i + 1);
+}
+
+async function refresh() {
+  STATE = await (await fetch("/state")).json();
+  // if the player we were viewing vanished, fall back to menu
+  if (NAV.cur.player && !STATE.players[NAV.cur.player]) home();
+  else render();
+}
+
+// ---- render dispatcher -------------------------------------------------------
+// Re-rendering rebuilds #screen's innerHTML, which would wipe anything half-typed into a form
+// (item editor, function body, new-stat boxes…) or any slot-chip you'd toggled but not saved.
+// So when render() is re-drawing the SAME screen (e.g. after a console command updates state),
+// we snapshot the form controls + toggled chips first and restore them afterward. Navigating to a
+// DIFFERENT screen does NOT restore (that's an intentional move away). Keyed by id / data-stat /
+// data-key, so only stably-identifiable fields are preserved (display-only inputs have none).
+let LAST_NAV_KEY = null;
+function _fieldKey(el) { return el.id || el.getAttribute("data-stat") || el.getAttribute("data-key") || ""; }
+function snapshotFields(root) {
+  const snap = {fields: {}, chips: []};
+  root.querySelectorAll("input, textarea, select").forEach(el => {
+    const key = _fieldKey(el); if (!key) return;
+    snap.fields[key] = (el.type === "checkbox" || el.type === "radio") ? {checked: el.checked} : {value: el.value};
+  });
+  root.querySelectorAll(".chip[data-slot].on").forEach(el => snap.chips.push(el.getAttribute("data-slot")));
+  return snap;
+}
+function restoreFields(root, snap) {
+  if (!snap) return;
+  root.querySelectorAll("input, textarea, select").forEach(el => {
+    const s = snap.fields[_fieldKey(el)]; if (!s) return;
+    if ("checked" in s) el.checked = s.checked; else el.value = s.value;
+  });
+  const on = new Set(snap.chips);
+  root.querySelectorAll(".chip[data-slot]").forEach(el => el.classList.toggle("on", on.has(el.getAttribute("data-slot"))));
+  if (root.querySelector("#fnbody") && typeof fnSyncGutter === "function") fnSyncGutter();  // keep line gutter in step
+}
+function render() {
+  const app = document.getElementById("screen");
+  const navKey = JSON.stringify(NAV.cur);
+  const same = navKey === LAST_NAV_KEY;
+  const snap = same ? snapshotFields(app) : null;  // preserve entries only on a same-screen redraw
+  const prevPage = same ? app.querySelector(".page") : null;
+  const scrollTop = prevPage ? prevPage.scrollTop : 0;   // .page is the scroll container — keep its position
+  KEYMAP = {}; ADD_ACTION = null;
+  document.getElementById("app").classList.toggle("menu", NAV.cur.kind === "menu");
+  document.getElementById("backbtn").disabled = NAV.stack.length === 0;
+  document.getElementById("crumb").textContent = crumbText();
+  const k = NAV.cur.kind;
+  try {   // a bad render must NEVER take down the console/footer — show an error card instead
+    if (k === "menu")    app.innerHTML = renderMenu();
+    else if (k === "picker") app.innerHTML = renderPicker();
+    else if (k === "wheel")  app.innerHTML = renderWheel();
+    else if (k === "inv")    app.innerHTML = renderInventory();
+    else if (k === "item")   app.innerHTML = renderItemEditor();
+    else if (k === "element") app.innerHTML = renderElementEditor();
+    else if (k === "world")  app.innerHTML = renderWorld();
+    else if (k === "worldsub") app.innerHTML = renderWorldSub();
+    else if (k === "fnedit")   app.innerHTML = renderFnEditor();
+    else app.innerHTML = renderSubpage();
+    restoreFields(app, snap);
+    if (same && scrollTop) { const np = app.querySelector(".page"); if (np) np.scrollTop = scrollTop; }
+  } catch (e) {
+    app.innerHTML = `<div class="page"><div class="card"><h3>render error (console still works)</h3>
+      <span class="muted">${String(e && e.message || e)}</span></div></div>`;
+    console.error("render error:", e);
+  }
+  LAST_NAV_KEY = navKey;
+}
+function crumbLabel(s) {
+  if (s.kind === "menu") return "menu";
+  if (s.kind === "picker") return "players";
+  if (s.kind === "world") return "world";
+  if (s.kind === "worldsub") return (WORLD_WHEEL.find(w => w.dest === s.dest) || {}).label || s.dest;
+  if (s.kind === "fnedit") return s.path ? "edit fn" : "new fn";
+  if (s.kind === "wheel") return s.player;
+  if (s.kind === "inv") return "inventory";
+  if (s.kind === "item") return s.item == null ? "new" : "editor";
+  if (s.kind === "help") return "help";
+  if (s.kind === "element") return (s.name ? "edit " : "new ") + s.etype;
+  if (s.kind === "sub") return s.slice;
+  return s.kind;
+}
+function crumbText() { return NAV.stack.concat([NAV.cur]).map(crumbLabel).join("  ›  "); }
+
+// ---- MAIN MENU ---------------------------------------------------------------
+function renderMenu() {
+  KEYMAP["p"] = () => go({kind: "picker"});
+  KEYMAP["w"] = () => go({kind: "world"});
+  return `<div class="menu">
+    <div class="slab players" onclick="KEYMAP['p']()">${hkHTML("Players", "p")}</div>
+    <div class="slab world" onclick="KEYMAP['w']()">${hkHTML("World", "w")}</div>
+  </div>`;
+}
+
+// ---- PIE WHEEL (shared by the player wheel AND the player picker) ------------
+// FORMULA: N segments fill the circle, each spanning 360/N degrees; segment 0 is CENTERED at the
+// top (12 o'clock) and they go clockwise. The wedges run all the way to the centre; a hub circle is
+// painted ON TOP for the centre button. N=1 -> one full disc; N=2 -> two half-circles; etc.
+function pieWheel(segs, center) {
+  // 100x100 viewBox, scaled to FIT the screen (preserveAspectRatio meet) so the WHOLE wheel shows,
+  // zoomed out and centered (a circle can't fill a rectangle without cropping, so we letterbox).
+  // rO ~49 keeps the wheel just inside the viewBox. center is optional — omit for no hub.
+  const n = segs.length, w = 360 / n, cx = 50, cy = 50, rO = 49, rC = center ? 13 : 0, rL = 35;
+  const P = (deg, r) => { const a = deg * Math.PI / 180; return [(cx + r * Math.sin(a)).toFixed(2), (cy - r * Math.cos(a)).toFixed(2)]; };
+  let svg = "";
+  segs.forEach((s, i) => {
+    if (n === 1) {
+      svg += `<circle cx="${cx}" cy="${cy}" r="${rO}" fill="${s.fill}" stroke="#14161a" stroke-width=".5" class="slice" onclick="${s.action}"/>`;
+    } else {
+      const [x1, y1] = P(i * w - w / 2, rO), [x2, y2] = P(i * w + w / 2, rO), big = w > 180 ? 1 : 0;
+      const d = `M${cx} ${cy} L${x1} ${y1} A${rO} ${rO} 0 ${big} 1 ${x2} ${y2} Z`;
+      svg += `<path d="${d}" fill="${s.fill}" stroke="#14161a" stroke-width=".5" class="slice" onclick="${s.action}"/>`;
+    }
+    const [lx, ly] = P(i * w, rL);
+    const sub = s.sub ? `<tspan x="${lx}" dy="3.6" class="sub">${s.sub}</tspan>` : "";
+    svg += `<text x="${lx}" y="${(ly - (s.sub ? 1.6 : 0)).toFixed(2)}" class="slabel"><tspan x="${lx}" class="ttl">${s.labelHTML}</tspan>${sub}</text>`;
+  });
+  if (center) {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${rC}" fill="#1b1e24" stroke="#3a4150" stroke-width=".5" class="slice"
+              ${center.action ? `onclick="${center.action}"` : ""}/>`;
+    svg += `<text x="${cx}" y="${cy}" class="clabel">${center.labelHTML}</text>`;
+  }
+  return `<div class="wheelwrap"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" id="wheelsvg">${svg}</svg></div>`;
+}
+
+// Assign each name a single-key accelerator: its first UNUSED letter. ONLY names that get no free
+// letter fall back to a number — numbered 1,2,…,9,0 (keyboard row order), starting at 1 and assigned
+// in order ONLY as needed (so the first letterless name is [1], not its position). After 0 (the 10th
+// number) we run out — extra letterless names get no key. Returns [{name,key,isNum}].
+const NUM_ROW = ["1","2","3","4","5","6","7","8","9","0"];
+function assignKeys(names) {
+  const usedLetters = new Set(), out = [];
+  let numIdx = 0;
+  for (const name of names) {
+    let key = null, isNum = false;
+    for (const ch of name.toLowerCase()) { if (/[a-z]/.test(ch) && !usedLetters.has(ch)) { key = ch; usedLetters.add(ch); break; } }
+    if (!key && numIdx < NUM_ROW.length) { key = NUM_ROW[numIdx++]; isNum = true; }
+    out.push({name, key, isNum});
+  }
+  return out;
+}
+
+// ---- PLAYER PICKER (Players -> choose who -> their wheel) ---------------------
+// Reuses the pie wheel: each segment = a player OBJECT (title = object/variable name, subtitle =
+// the character's {name:""}). No centre button (wedges meet at the centre).
+function renderPicker() {
+  const names = Object.keys(STATE.players);
+  if (!names.length) return `<div class="page"><span class="muted">no players yet — try
+     <b>/character new &lt;character&gt;</b> in the console.</span></div>`;
+  const keyed = assignKeys(names);
+  const segs = keyed.map((e, i) => {
+    const p = STATE.players[e.name];
+    const charName = (p.nbt && p.nbt.name) || "";
+    const act = `go({kind:'wheel',player:'${e.name}'})`;
+    if (e.key) KEYMAP[e.key] = () => go({kind: "wheel", player: e.name});  // only keys that were assigned
+    // letter -> gold letter in the name; number fallback -> "[N] name" with N gold; none -> plain.
+    const labelHTML = !e.key ? e.name
+                     : e.isNum ? `[<tspan class="hk">${e.key}</tspan>] ${e.name}`
+                     : hkSVG(e.name, e.key);
+    return {labelHTML, sub: charName, fill: `hsl(${Math.round(i * 360 / names.length)} 40% 60%)`, action: act};
+  });
+  return pieWheel(segs, null);  // no centre hub
+}
+
+// ---- PLAYER WHEEL ------------------------------------------------------------
+const WHEEL = [
+  {label: "stats", key: "s", slice: "stats"},
+  {label: "flags", key: "f", slice: "flags"},
+  {label: "talents", key: "t", slice: "talents"},
+  {label: "abilities", key: "a", slice: "abilities"},
+  {label: "storyline", key: "l", slice: "storyline"},
+  {label: "effects", key: "e", slice: "effects"},
+  {label: "quests", key: "q", slice: "quests"},
+  {label: "inventory", key: "i", slice: "inventory"},
+];
+function renderWheel() {
+  const player = NAV.cur.player, n = WHEEL.length;
+  const segs = WHEEL.map((it, i) => {
+    const open = it.slice === "inventory" ? `go({kind:'inv',player:'${player}'})`
+                                          : `go({kind:'sub',player:'${player}',slice:'${it.slice}'})`;
+    KEYMAP[it.key] = it.slice === "inventory" ? () => go({kind: "inv", player})
+                                              : () => go({kind: "sub", player, slice: it.slice});
+    return {labelHTML: hkSVG(it.label, it.key), fill: `hsl(${Math.round(i * 360 / n)} 46% 46%)`, action: open};
+  });
+  // centre is the NEXT TURN button — runs /turn next (which pulses the 'turn_start' proc).
+  KEYMAP["n"] = () => send("/turn next");
+  const centerLabel = `<tspan x="50" dy="-1.4"><tspan class="hk">N</tspan>ext</tspan><tspan x="50" dy="5.6">Turn</tspan>`;
+  return pieWheel(segs, {labelHTML: centerLabel, action: `send('/turn next')`});
+}
+
+// ---- GENERIC SUB-PAGES (stats/formulas/talents/abilities/effects/quests/nbt/storyline) ----
+function card(title, inner) { return `<div class="card"><h3>${title}</h3>${inner}</div>`; }
+function kv(obj, skipZero) {
+  const rows = Object.entries(obj || {})
+    .filter(([k, v]) => v !== null && v !== "" && !(skipZero && v === 0))
+    .map(([k, v]) => `<div><span>${k}</span> <b>${typeof v === "object" ? JSON.stringify(v) : v}</b></div>`);
+  return rows.length ? `<div class="kv">${rows.join("")}</div>` : `<span class="muted">—</span>`;
+}
+function pills(arr) { return (arr && arr.length) ? arr.map(s => `<span class="pill">${s}</span>`).join("") : `<span class="muted">none</span>`; }
+// parse an element repr ("name{k:v,k2:[..],k3:"str"}") into {name, ...fields} for the cards.
+function splitNbt(body) {
+  const parts = []; let depth = 0, q = false, cur = "";
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (q) { cur += c; if (c === '"' && body[i - 1] !== "\\") q = false; continue; }
+    if (c === '"') { q = true; cur += c; continue; }
+    if (c === "[" || c === "{") { depth++; cur += c; continue; }
+    if (c === "]" || c === "}") { depth--; cur += c; continue; }
+    if (c === "," && depth === 0) { parts.push(cur); cur = ""; continue; }
+    cur += c;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts;
+}
+function parseRepr(repr) {
+  const obj = {name: typeOf(repr)};
+  const m = String(repr).match(/^[^{]*\{([\s\S]*)\}[^}]*$/);
+  if (m) splitNbt(m[1]).forEach(p => {
+    const i = p.indexOf(":"); if (i < 0) return;
+    let k = p.slice(0, i).trim(), v = p.slice(i + 1).trim();
+    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1).replace(/\\"/g, '"');
+    obj[k] = v;
+  });
+  return obj;
+}
+// equipment chip handler: toggle ONE item in/out of a slot (worn -> unequip that item; else equip it).
+function toggleEquip(player, slot, id, worn) {
+  send(worn ? `/item unequip ${player} ${id}` : `/item equip ${player} ${id} ${slot}`);
+}
+// edit a slot's body-coverage % (0–100). Accepts "12" or "12%"; sets the per-player override.
+function covEdit(player, slot, raw) {
+  let n = parseFloat(String(raw).replace(/[^0-9.\-]/g, ""));
+  if (isNaN(n)) return;
+  n = Math.max(0, Math.min(100, n));
+  send(`/coverage ${player} ${slot} ${n}`);
+}
+
+function renderSubpage() {
+  const p = STATE.players[NAV.cur.player], slice = NAV.cur.slice, player = NAV.cur.player;
+  // '=' fires this slice's "+": open the element creator, or focus the new-stat box
+  if (slice === "talents" || slice === "abilities" || slice === "effects" || slice === "quests") {
+    const etypeOf = {talents:"talent", abilities:"ability", effects:"effect", quests:"quest"};
+    ADD_ACTION = () => go({kind: "element", player, etype: etypeOf[slice]});
+  }
+  else if (slice === "stats")
+    ADD_ACTION = () => document.getElementById("newstat_name") && document.getElementById("newstat_name").focus();
+  let body;
+  if (slice === "stats") body = statsTab(p, NAV.cur.player);
+  else if (slice === "flags") body = flagsTab(p, player);
+  else if (slice === "talents") body = elementCards("talent", player, p.talents);
+  else if (slice === "abilities") body = elementCards("ability", player, p.abilities);
+  else if (slice === "effects") body = elementCards("effect", player, (p.effects || []).map(e => e.repr || ""));
+  else if (slice === "quests") body = elementCards("quest", player, p.quests);
+  else if (slice === "nbt") body = card(p.name + " — nbt (raw)", kv(p.nbt));
+  else if (slice === "storyline") body = storylineTab(p, player);
+  else body = card(slice, `<span class="muted">—</span>`);
+  return `<div class="page">${body}</div>`;
+}
+
+// ---- STORYLINE (per-player log of what happened, by turn; + DM notes & last-turn summary) ----
+// Minimal markdown: **bold**, *italic*, `code`, # headings, - lists, blank lines. Escapes HTML first.
+function md(s) {
+  s = escHTML(s);                          // escape first; markdown sigils (#,*,`,```) survive
+  const out = []; let inCode = false, code = [];
+  s.split("\n").forEach(l => {
+    if (/^\s*```/.test(l)) {                // fenced code block
+      if (inCode) { out.push(`<pre class="md-pre">${code.join("\n")}</pre>`); code = []; inCode = false; }
+      else inCode = true;
+      return;
+    }
+    if (inCode) { code.push(l); return; }
+    const t = l.replace(/`([^`]+)`/g, "<code>$1</code>")
+               .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+    const h = t.match(/^(#{1,3})\s+(.*)$/);
+    if (h) out.push(`<div class="md-h${h[1].length}">${h[2]}</div>`);
+    else if (/^\s*[-*]\s+/.test(l)) out.push(`<div class="md-li">• ${t.replace(/^\s*[-*]\s+/, "")}</div>`);
+    else out.push(t.trim() ? `<div>${t}</div>` : `<div class="md-sp"></div>`);
+  });
+  if (inCode && code.length) out.push(`<pre class="md-pre">${code.join("\n")}</pre>`);
+  return out.join("");
+}
+// ---- HELP / formatting reference (overlay; served fresh from reference.md so edits show on reload) ----
+function helpOpen() { return document.getElementById("helpov").classList.contains("show"); }
+function openHelp() { document.getElementById("helpov").classList.add("show"); cmd.blur(); loadHelp(); }
+function closeHelp() { document.getElementById("helpov").classList.remove("show"); }
+function toggleHelp() { helpOpen() ? closeHelp() : openHelp(); }
+async function loadHelp() {
+  const el = () => document.getElementById("helpbody");
+  try {
+    const txt = await (await fetch("/help")).text();
+    if (el()) el().innerHTML = md(txt);
+  } catch (e) {
+    if (el()) el().innerHTML = `<span class="muted">couldn't load the reference (${escHTML(String(e))})</span>`;
+  }
+}
+function storyEntry(e, player) {
+  if (e.id === STORY_EDIT) {
+    return `<div class="storyrow editing"><div class="storyturn">turn ${e.turn}</div>
+      <textarea id="story_x_${e.id}" class="storyta">${escHTML(e.text || "")}</textarea>
+      <div class="storyacts">
+        <button class="elbtn done" title="save" onclick="saveStoryEdit('${player}',${e.id})">✓</button>
+        <button class="elbtn del" title="delete — stages the command" onclick="cmd.value='/storyline remove ${player} ${e.id}';cmd.focus();STORY_EDIT=null;render()">🗑</button>
+        <button class="elbtn" title="cancel" onclick="STORY_EDIT=null;render()">✕</button></div></div>`;
+  }
+  return `<div class="storyrow"><div class="storyturn">turn ${e.turn}
+      <button class="elbtn edit" title="edit" onclick="STORY_EDIT=${e.id};render()">✎</button></div>
+    <div class="storytext">${md(e.text || "")}</div></div>`;
+}
+function storylineTab(p, player) {
+  const nb = p.nbt || {};
+  const entries = (nb.storyline || []).slice().sort((a, b) => STORY_DESC ? b.turn - a.turn : a.turn - b.turn);
+  const clean = (v) => v && v !== "None" ? v : "";
+  const sortBtn = `<button class="calzoom" onclick="STORY_DESC=!STORY_DESC;render()">sort: ${STORY_DESC ? "newest first" : "oldest first"}</button>`;
+  const now = STATE.turn || 0;
+  const addRow = `<div class="storyadd"><div class="storyturn">turn <input class="dsi" id="story_newturn" value="${now}">
+      <div class="muted" style="font-size:11px;margin-top:3px">now: turn ${now}</div></div>
+    <textarea id="story_newtext" class="storyta" placeholder="what happened… (markdown: **bold**, *italic*, # heading, - list)"></textarea>
+    <button class="go" onclick="addStory('${player}')">＋ add</button></div>`;
+  const list = entries.length ? entries.map(e => storyEntry(e, player)).join("") : `<span class="muted">no entries yet</span>`;
+  const summary = `<div class="storynote"><label>Last Turn Summary <span class="muted">(player-side)</span></label>
+    <textarea class="storyta" onblur="saveStoryField('${player}','summary',this.value)">${escHTML(clean(nb.last_summary))}</textarea></div>`;
+  const notes = MODE === "dm" ? `<div class="storynote"><label>DM notes <span class="muted">(DM only)</span></label>
+    <textarea class="storyta" onblur="saveStoryField('${player}','note',this.value)">${escHTML(clean(nb.dm_notes))}</textarea></div>` : "";
+  return card(player + " — storyline",
+    `<div class="storywrap"><div class="storyhead">${sortBtn}</div>${addRow}
+       <div class="storylist">${list}</div>
+       <div class="storynotes">${summary}${notes}</div></div>`);
+}
+async function addStory(player) {
+  const t = ((document.getElementById("story_newturn") || {}).value || "0");
+  const x = ((document.getElementById("story_newtext") || {}).value || "");
+  if (!x.trim()) return;
+  await runOne(`/storyline add ${player} ${parseInt(t) || 0} ${x}`);   // runOne: one POST (keeps the markdown's newlines)
+  render();
+}
+async function saveStoryEdit(player, id) {
+  const x = ((document.getElementById("story_x_" + id) || {}).value || "");
+  STORY_EDIT = null;
+  if (x.trim()) await runOne(`/storyline edit ${player} ${id} ${x}`);
+  render();
+}
+async function saveStoryField(player, which, val) { await runOne(`/storyline ${which} ${player} ${val}`); }
+
+// ---- FLAGS / PROCS tab -------------------------------------------------------
+// Lists every talent/effect that has a proc, shows its trigger condition (AND within a clause,
+// OR across clauses), and gives pulse / on / off buttons for each flag it watches.
+function parseProc(procStr) {                 // "[{a:true,b:false}]" -> [{a:true,b:false}]
+  if (!procStr || procStr === "None" || procStr === "[]") return [];
+  return (String(procStr).match(/\{[^}]*\}/g) || []).map(g => {
+    const cond = {};
+    g.slice(1, -1).split(",").forEach(pair => {
+      const [k, v] = pair.split(":");
+      if (k && k.trim()) cond[k.trim()] = (v || "").trim() === "true";
+    });
+    return cond;
+  }).filter(c => Object.keys(c).length);
+}
+function procDesc(clauses) {
+  return clauses.map(c => Object.entries(c).map(([k, v]) => v ? k : `NOT ${k}`).join(" AND ")).join("   OR   ") || "—";
+}
+function flagControl(player, flag, on) {
+  return `<span class="flagctl">
+    <span class="flagname ${on ? "fon" : ""}">${flag}</span>
+    <button title="pulse — fire once, then revert" onclick="send('/proc pulse ${player} ${flag}')">pulse</button>
+    <button title="enable — sticky on" onclick="send('/proc enable ${player} ${flag}')">on</button>
+    <button title="disable — off" onclick="send('/proc disable ${player} ${flag}')">off</button></span>`;
+}
+// every flag this player's talents/effects reference -> what it's connected to.
+// talent proc = "triggers" the talent · effect proc = "pulsed by" the effect (on step turns) ·
+// effect clear_when = this flag "clears" the effect.
+// flags from EITHER clause format `[{a:true},{b:false}]` (talent proc / effect clear_when)
+// OR a plain signal token list `[poison_tick:true, bleed]` (effect proc).
+function flagsAny(str) {
+  if (!str || str === "None") return [];
+  const clauses = parseProc(str);
+  if (clauses.length) return [...new Set(clauses.flatMap(c => Object.keys(c)))];
+  return [...new Set(String(str).replace(/^\[|\]$/g, "").split(",").map(t => t.split(":")[0].trim()).filter(Boolean))];
+}
+function flagConnections(p) {
+  const conn = {};
+  const add = (flag, role, kind, name) => { (conn[flag] = conn[flag] || []).push({role, kind, name}); };
+  const label = (el) => el.name && el.name !== "None" ? el.name : el.name;
+  (p.talents || []).forEach(r => { const el = parseRepr(r); flagsAny(el.proc).forEach(f => add(f, "triggers", "talent", label(el))); });
+  (p.effects || []).forEach(e => {
+    const el = parseRepr(e.repr || "");
+    flagsAny(el.proc).forEach(f => add(f, "pulsed by", "effect", label(el)));     // effect emits these on step turns
+    flagsAny(el.clear_when).forEach(f => add(f, "clears", "effect", label(el)));   // these end the effect
+  });
+  (p.quests || []).forEach(r => {
+    const qq = typeof r === "string" ? parseRepr(r) : r;
+    (qq.objectives || []).forEach(o => (o.proc || []).forEach(tok => {            // pulsed when that element completes
+      const f = String(tok).split(":")[0].trim();
+      if (f) add(f, "completed by", "quest", (o.label || o.id) + " · " + qq.name);
+    }));
+    flagsAny(qq.expire_when).forEach(f => add(f, "fails", "quest", qq.name));      // this proc fails the quest
+  });
+  return conn;
+}
+function flagsTab(p, player) {
+  const ps = p.proc_state || {};
+  const conn = flagConnections(p);
+  const flags = [...new Set([...Object.keys(conn), ...Object.keys(ps).filter(k => ps[k])])].sort();
+  const rows = flags.map(f => {
+    const cs = conn[f] || [];
+    const conns = cs.length
+      ? cs.map(c => `<span class="flagconn"><b>${c.role}</b> ${escHTML(c.name)} <span class="muted">(${c.kind})</span></span>`).join("")
+      : `<span class="flagconn muted">active, not connected to anything</span>`;
+    return `<div class="flagentry"><input type="checkbox" class="mpchk" data-flag="${escAttr(f)}" title="stage for a combined pulse">${flagControl(player, f, !!ps[f])}<div class="flagconns">${conns}</div></div>`;
+  }).join("");
+  const bar = `<div class="multipulsebar">
+    <button class="fnbtn" onclick="pulseSelected('${player}')">⚡ pulse selected together</button>
+    <span class="muted">check flags to fire them in ONE pulse — for procs needing two signals on at once (e.g. <code>{in_combat:true,end_of_turn:true}</code>)</span></div>`;
+  const body = flags.length ? bar + `<div class="flaglist">${rows}</div>`
+    : `<span class="muted">no flags yet — give a talent/effect a <code>proc</code> or <code>clear_when</code>, or pulse one in the console.</span>`;
+  return card(player + " — flags", body);
+}
+// fire every checked flag in a single momentary pulse (sets them all on, fires once, reverts).
+function pulseSelected(player) {
+  const fs = [...document.querySelectorAll(".mpchk:checked")].map(c => c.dataset.flag);
+  if (!fs.length) return;
+  send(`/proc pulse ${player} ${fs.join(",")}`);
+}
+
+// ---- STATS TAB (base × mult + flat) ------------------------------------------
+// Each stat: current base / mult / flat shown as read-only values, each with a tiny delta box under
+// it. Type a delta (e.g. 0.01) + Enter -> fires /stat … add <delta>, recomputes, the "=" value updates.
+function snum(v) { const n = Math.round(Number(v) * 1000) / 1000; return Number.isFinite(n) ? n : 0; }
+function statField(player, name, channel, value) {
+  return `<div class="sfield"><div class="sval">${snum(value)}</div>
+    <input class="sdelta" type="text" placeholder="±" inputmode="decimal"
+      onkeydown="if(event.key==='Enter'){statDelta('${player}','${name}','${channel}',this.value);this.value='';}"></div>`;
+}
+function statDelta(player, name, channel, raw) {
+  const n = parseFloat(raw); if (isNaN(n) || n === 0) return;
+  send(`/stat modify ${player} ${channel} ${name} add ${n}`);   // base|multiplier|flat live under modify
+}
+function statsTab(p, player) {
+  const detail = p.stat_detail || {}, formulas = p.formulas || {};
+  const names = Object.keys(detail).length ? Object.keys(detail) : Object.keys(p.stats || {});
+  const head = `<div class="statrow sthead"><div>stat</div><div>base</div><div></div><div>multiplier</div>
+    <div></div><div>flat</div><div></div><div>=</div><div>formula</div></div>`;
+  const rows = names.map(name => {
+    const d = detail[name] || {base: p.stats[name] || 0, mult: 1, flat: 0};
+    const computed = Number(d.base) * Number(d.mult) + Number(d.flat);
+    const f = formulas[name] && formulas[name] !== "None" ? formulas[name] : "";
+    return `<div class="statrow">
+      <div class="sname">${name}</div>
+      ${statField(player, name, "base", d.base)}<div class="sop">×</div>
+      ${statField(player, name, "multiplier", d.mult)}<div class="sop">+</div>
+      ${statField(player, name, "flat", d.flat)}<div class="sop">=</div>
+      <div class="scomp">${snum(computed)}</div>
+      <input class="sformula" value="${escAttr(f)}" placeholder="= formula (Enter to set, empty to clear)"
+        title="${escAttr(f)}"
+        onkeydown="if(event.key==='Enter'){formulaEdit('${player}','${name}',this.value,${f ? "true" : "false"});}">
+    </div>`;
+  }).join("");
+  const addRow = `<div class="addstat">
+    <input id="newstat_name" placeholder="new stat name">
+    <input id="newstat_formula" placeholder="= formula (optional, e.g. stat.health * 0.1)">
+    <button class="go" onclick="addStat('${player}')">＋ add stat</button></div>`;
+  return card(player + " — stats (base × mult + flat)", addRow + `<div class="stattab">${head}${rows}</div>`);
+}
+
+// add a new stat (+ optional formula) from the stats tab's top row
+function addStat(player) {
+  const name = (document.getElementById("newstat_name").value || "").trim();
+  if (!name) return;
+  const f = (document.getElementById("newstat_formula").value || "").trim().replace(/^=/, "").trim();
+  send(f ? `/formula new ${player} ${name} = ${f}` : `/stat new ${player} ${name} 0`);
+}
+// edit a stat's derived-stat formula inline from the stats tab (empty clears it).
+function formulaEdit(player, name, raw, existing) {
+  const f = (raw || "").trim().replace(/^=/, "").trim();
+  if (!f) { if (existing) send(`/formula remove ${player} ${name}`); return; }
+  send(`/formula ${existing ? "modify" : "new"} ${player} ${name} = ${f}`);
+}
+
+// ---- TALENT / EFFECT / ABILITY creation (generic element editor) -------------
+// Each kind's default fields mirror the /talent /effect /ability commands; plus a free custom-nbt box
+// since elements aren't limited to the predefined fields.
+// Full-page editor layout per kind: rows of [field, flex-weight] cells. The FIRST box of row 1 is the
+// identifier (the {name} token used in commands/lookups); name is a free-text label shown on cards.
+// Fields a kind doesn't list simply aren't shown; arbitrary extras still go in the bottom nbt box.
+// The proc/reaction/on_apply/on_clear/on_hit/reward fields are GONE from these layouts — they're now
+// authored as 🪝 hooks (the section appended below). Only the element's own mechanical params remain.
+const ELEMENT_LAYOUT = {
+  talent:  [[["name",1],["name",1]], [["origin",1],["description",2]], [["level",1]]],
+  effect:  [[["name",1],["name",1]], [["description",1]], [["duration",1],["step",1]]],
+  ability: [[["name",1],["name",1]], [["description",1]], [["level",1],["damage",1]],
+            [["cast_type",1],["cooldown",1],["affinity",1],["cost",1]]],
+  quest:   [[["name",1],["name",1]], [["description",1]], [["expiration",1]]],
+};
+const EL_FREETEXT = new Set(["name", "description", "origin"]);  // quote these (may contain spaces)
+const EL_TEXTAREA = new Set(["description"]);                           // render as a multi-line box
+const EL_LABEL = {name: "name", cast_type: "cast type", on_hit: "on hit (on cast)",
+  on_apply: "on apply (when gained)", on_clear: "on clear (when removed)", reaction: "reaction (per step/proc)",
+  duration: "duration / until (turns or a proc)"};
+function elFields(kind) { return (ELEMENT_LAYOUT[kind] || [[["name",1]]]).reduce((a, r) => a.concat(r.map(c => c[0])), []); }
+// quests list: a "+" to create, then each quest with a ✓ button that COMPLETES it (runs reward + archives).
+// one card for any element — name (or identifier) header, level, description, then a tag per field.
+const ELEMENT_TAGCLS = {cast_type:"abt-cast", proc:"abt-cast", cooldown:"abt-cd", duration:"abt-cd",
+  expiration:"abt-cd", step:"abt-cd", clear_when:"abt-cd", cost:"abt-cost", reward:"abt-cost", affinity:"abt-aff",
+  damage:"abt-dmg", on_hit:"abt-hit", reaction:"abt-hit", on_apply:"abt-hit", on_clear:"abt-hit"};
+const ELEMENT_TAGSKIP = new Set(["name", "name", "description", "level", "uuid", "prefix", "suffix",
+  "_equipped_by", "_granted_by", "_granted", "objectives"]);
+// ---- QUEST PROGRESS ELEMENTS (objectives) ------------------------------------
+// A quest's `objectives` is a list of {id,type,label,goal,current,proc,done}. On a quest CARD they
+// render as live controls anyone can click (binary check · segmented ticks · drag-fill percent); each
+// click sends /quest objective <player> <quest> <id> set <n>. Completing an element pulses its procs;
+// completing them ALL auto-completes the quest (handled server-side).
+function isObjDone(o) {
+  const c = Number(o.current) || 0;
+  if (o.type === "percent") return c >= 100;
+  if (o.type === "segment") return c >= (Number(o.goal) || 1);
+  return c >= 1;
+}
+function questObjSet(player, quest, id, value) { send(`/quest objective ${player} ${quest} ${id} set ${value}`); }
+function questBarClick(ev, player, quest, id, goal) {   // segmented bar: click position -> nearest 0..goal
+  const r = ev.currentTarget.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+  questObjSet(player, quest, id, Math.round(frac * goal));
+}
+function questPercentDrag(ev, player, quest, id) {      // percent bar: drag (or click) to fill; commit on release
+  ev.preventDefault();
+  const bar = ev.currentTarget, r = bar.getBoundingClientRect();
+  const fill = bar.querySelector(".qfill"), lab = bar.parentNode.querySelector(".qpctlab");
+  let pct = 0;
+  const move = (e) => { pct = Math.round(Math.min(100, Math.max(0, (e.clientX - r.left) / r.width * 100)));
+    if (fill) fill.style.width = pct + "%"; if (lab) lab.textContent = pct + "%"; };
+  const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+    questObjSet(player, quest, id, pct); };   // one command on release, not per-pixel
+  move(ev); document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+}
+function questObjectivesHTML(el, player) {
+  const objs = el.objectives || []; if (!objs.length) return "";
+  const q = el.name;
+  const rows = objs.map(o => {
+    const lab = escHTML(o.label || o.id), done = isObjDone(o);
+    let widget;
+    if (o.type === "binary") {
+      widget = `<span class="qbin ${o.current ? "on" : ""}" title="toggle complete"
+        onclick="questObjSet('${player}','${q}','${o.id}',${o.current ? 0 : 1})">${o.current ? "✓" : ""}</span>`;
+    } else if (o.type === "segment") {
+      const cells = Array.from({length: Number(o.goal) || 1}, (_, i) =>
+        `<span class="qseg ${i < o.current ? "on" : ""}"></span>`).join("");
+      widget = `<span class="qbar qsegbar" title="click to set (0..${o.goal})"
+        onclick="questBarClick(event,'${player}','${q}','${o.id}',${o.goal})">${cells}</span><span class="qnum">${o.current}/${o.goal}</span>`;
+    } else {  // percent
+      widget = `<span class="qbar qpctbar" title="drag to fill"
+        onmousedown="questPercentDrag(event,'${player}','${q}','${o.id}')"><span class="qfill" style="width:${o.current}%"></span></span><span class="qnum qpctlab">${o.current}%</span>`;
+    }
+    return `<div class="qobj ${done ? "qdone" : ""}"><span class="qobl" title="${lab}">${lab}</span>${widget}</div>`;
+  }).join("");
+  const n = objs.filter(isObjDone).length;
+  return `<div class="qobjs"><div class="qobjhead">progress · ${n}/${objs.length} done</div>${rows}</div>`;
+}
+// ---- quest objectives BUILDER (in the quest editor) --------------------------
+// A client-side list (QOBJ) of rows, initialized from the quest when you open the editor. "+ progress
+// element" appends; each row picks its type (left) + proc-on-complete args (right). On Save it stages a
+// batch: the base /quest command, then (when editing) `objective <q> clear` + one add/goal/proc/set per
+// row — so editing rebuilds the set while preserving each element's current progress.
+let QOBJ = [], QOBJ_FOR = null;
+function ensureQObj(el) {
+  const key = JSON.stringify(NAV.cur);
+  if (QOBJ_FOR === key) return;                         // already initialized for this editor screen
+  QOBJ = (el.objectives || []).map(o => ({type: o.type || "binary", label: o.label || "",
+    goal: Number(o.goal) || (o.type === "percent" ? 100 : o.type === "segment" ? 3 : 1),
+    proc: Array.isArray(o.proc) ? o.proc.join(",") : (o.proc || ""), current: Number(o.current) || 0}));
+  QOBJ_FOR = key;
+}
+function qobjRowHTML(o, i) {
+  const opt = (v, t) => `<option value="${v}" ${o.type === v ? "selected" : ""}>${t}</option>`;
+  const goalCell = o.type === "segment"
+    ? `<input class="qbgoal" type="number" min="1" value="${o.goal}" title="how many (e.g. 7)" oninput="qobjEdit(${i},'goal',this.value)">`
+    : `<span class="qbgoalsp">${o.type === "percent" ? "0–100%" : "check"}</span>`;
+  return `<div class="qbrow">
+    <select class="qbtype" title="which kind of progress element" onchange="qobjEdit(${i},'type',this.value)">
+      ${opt("binary", "☑ binary")}${opt("segment", "▰ segments")}${opt("percent", "▰ percent")}</select>
+    <input class="qblabel" value="${escAttr(o.label)}" placeholder="what to accomplish" oninput="qobjEdit(${i},'label',this.value)">
+    ${goalCell}
+    <input class="qbproc" value="${escAttr(o.proc)}" placeholder="proc on complete, e.g. remove_hex:true" oninput="qobjEdit(${i},'proc',this.value)">
+    <button class="qbdel" title="remove this element" onclick="qobjDel(${i})">✕</button></div>`;
+}
+function renderQObjBuilder() { const b = document.getElementById("qobj_builder"); if (b) b.innerHTML = QOBJ.map(qobjRowHTML).join(""); }
+function qobjEdit(i, field, val) {
+  if (!QOBJ[i]) return;
+  QOBJ[i][field] = field === "goal" ? (parseInt(val) || 1) : val;
+  if (field === "type") {   // switching type resets the goal to that type's natural default; re-render to show/hide it
+    if (val === "percent") QOBJ[i].goal = 100;
+    else if (val === "binary") QOBJ[i].goal = 1;
+    else if (!QOBJ[i].goal || QOBJ[i].goal <= 1) QOBJ[i].goal = 3;
+    renderQObjBuilder();
+  }
+}
+function qobjAdd() { QOBJ.push({type: "binary", label: "", goal: 1, proc: "", current: 0}); renderQObjBuilder(); }
+function qobjDel(i) { QOBJ.splice(i, 1); renderQObjBuilder(); }
+function questBuilderHTML() {
+  return `<div class="qbuilder"><div class="qbhead">Progress elements
+      <span class="hint">left picks the type · right sets proc args fired when that element completes</span></div>
+    <div id="qobj_builder">${QOBJ.map(qobjRowHTML).join("")}</div>
+    <span class="addchip" onclick="qobjAdd()">＋ progress element</span></div>`;
+}
+function elementCard(kind, el, player) {
+  const tags = [];
+  Object.entries(el).forEach(([k, v]) => {
+    if (ELEMENT_TAGSKIP.has(k) || v == null || v === "" || v === "None") return;
+    let label = `${k} ${v}`;
+    if (k === "cooldown" && String(v).includes("/")) { const [cur, tot] = String(v).split("/"); label = parseInt(cur) <= 0 ? `cd ${tot}t` : `cd ${cur}/${tot}`; }
+    tags.push(`<span class="abtag ${ELEMENT_TAGCLS[k] || "abt-misc"}">${label}</span>`);
+  });
+  const header = el.name;
+  const lvl = el.level && Number(el.level) !== 1 ? `<span class="ab-lvl">lv${el.level}</span>` : "";
+  const sub = lvl ? `<div class="ab-sub">${lvl}</div>` : "";
+  const desc = el.description && el.description !== "None" ? `<div class="ab-desc">${el.description}</div>` : "";
+  const uuid = el.uuid && el.uuid !== "None"
+    ? `<span class="ab-uuid" title="uuid — use in selectors, e.g. @[${kind}={uuid:${el.uuid}}]">${el.uuid}</span>` : "";
+  // item-GRANTED elements are derived (from a held/worn item) — editing/deleting them is futile (they
+  // regenerate), so show a source badge and drop the edit/delete buttons.
+  const grantedBy = el._granted_by || el._equipped_by;
+  // consistent edit / (complete, quests only) / delete buttons across talent/effect/ability/quest — pinned, never overflow
+  const delCmd = kind === "quest" ? `/quest delete ${player} ${el.name}` : `/${kind} remove ${player} ${el.name}`;
+  const complete = kind === "quest" && !grantedBy
+    ? `<button class="elbtn done" title="complete: run reward + archive" onclick="send('/quest complete ${player} ${el.name}')">✓</button>` : "";
+  const buttons = grantedBy
+    ? `${uuid}<span class="grantbadge" title="granted by item ${escAttr(String(grantedBy))} — remove/unequip the item to revoke">🜸 ${escHTML(String(grantedBy))}</span>`
+    : `${uuid}
+    <button class="elbtn edit" title="edit" onclick="go({kind:'element',etype:'${kind}',player:'${player}',name:'${el.name}'})">✎</button>
+    ${complete}
+    <button class="elbtn del" title="delete — stages the command; press Enter to confirm" onclick="cmd.value='${delCmd}';cmd.focus()">🗑</button>`;
+  const objectives = kind === "quest" ? questObjectivesHTML(el, player) : "";
+  return `<div class="ability-card${grantedBy ? " granted" : ""}">
+      <div class="ab-head"><span class="ab-name">${header}</span><span class="ab-btns">${buttons}</span></div>
+      ${sub}${desc}<div class="ab-tags">${tags.join("") || '<span class="muted" style="font-size:11px">—</span>'}</div>${objectives}</div>`;
+}
+function escAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+function findElement(player, kind, name) {                 // locate an existing element's parsed data (for editing)
+  const p = STATE.players[player]; if (!p) return null;
+  const list = kind === "talent" ? p.talents : kind === "ability" ? p.abilities
+            : kind === "effect" ? (p.effects || []).map(e => e.repr || "") : p.quests;
+  for (const r of (list || [])) {
+    const el = typeof r === "string" ? parseRepr(r) : r;
+    if (el && el.name === name) return el;
+  }
+  return null;
+}
+function plural(k) { return k === "ability" ? "abilities" : k + "s"; }   // ability -> abilities (not "abilitys")
+function wrapProc(val) {   // "a:true" -> "[{a:true}]"; explicit "{a},{b}" or "[..]" normalized to "[..]"
+  let v = val.replace(/^\[|\]$/g, "").trim();
+  if (!v.includes("{")) v = "{" + v + "}";   // bare clause needs braces or the nbt parser makes it a list
+  return "[" + v + "]";
+}
+function bracketList(val) { return "[" + val.replace(/^\[|\]$/g, "").trim() + "]"; }   // a plain signal token list (no clause braces)
+function elementCards(kind, player, reprs) {
+  const add = `<span class="addchip" onclick="go({kind:'element',player:'${player}',etype:'${kind}'})">＋ new ${kind}</span>`;
+  const els = (reprs || []).filter(Boolean).map(r => typeof r === "string" ? parseRepr(r) : r);  // dict (abilities) or repr
+  const grid = els.length ? `<div class="ability-grid">${els.map(e => elementCard(kind, e, player)).join("")}</div>`
+                          : `<div class="muted" style="margin-top:10px">none yet</div>`;
+  return card(plural(kind), add + grid);
+}
+// ---- 🪝 hooks attached to an element (replaces the old proc/reaction/on_apply/on_clear fields) ----
+// An element "wears" hooks by name (stored in its nbt `hooks:[...]`). The picker only offers hooks
+// whose context matches this element's kind (or is blank = any). Hooks themselves are made in the Lab
+// (or `/hook new`); here you just attach/detach them.
+let ELHOOKS = [], ELHOOKS_FOR = null;
+function hookListOf(el) {
+  const h = el && el.hooks;
+  if (Array.isArray(h)) return h.slice();
+  if (typeof h === "string" && h && h !== "None") return h.replace(/^\[|\]$/g, "").split(/[,\s]+/).filter(Boolean);
+  return [];
+}
+function ensureElHooks(el) { const key = JSON.stringify(NAV.cur); if (ELHOOKS_FOR === key) return; ELHOOKS = hookListOf(el); ELHOOKS_FOR = key; }
+function elHookAttach() { const s = document.getElementById("el_hookpick"); const n = s && s.value; if (n && !ELHOOKS.includes(n)) ELHOOKS.push(n); renderElHooks(); }
+function elHookDetach(n) { ELHOOKS = ELHOOKS.filter(x => x !== n); renderElHooks(); }
+function elHooksInner(kind) {
+  const all = STATE.hooks || {};
+  const chips = ELHOOKS.length ? ELHOOKS.map(n => { const h = all[n];
+    return `<span class="hookchip"><b>${escHTML(n)}</b> <span class="muted">${h ? "on " + escHTML(h.on || "?") : "(missing)"}</span><span class="x" onclick="elHookDetach('${n}')">✕</span></span>`; }).join("")
+    : `<span class="muted">no hooks attached</span>`;
+  const avail = Object.keys(all).filter(n => { const c = all[n].context || ""; return (c === "" || c === kind) && !ELHOOKS.includes(n); });
+  const picker = avail.length
+    ? `<select id="el_hookpick">${avail.map(n => `<option value="${n}">${escHTML(n)} — on ${escHTML(all[n].on || "?")}</option>`).join("")}</select> <button class="fnbtn" onclick="elHookAttach()">＋ attach</button>`
+    : `<span class="muted">no ${kind}-context hooks yet — make one in the Lab</span>`;
+  return `<div class="hookchips">${chips}</div><div class="hookadd">${picker}
+    <button class="fnbtn" onclick="openLabFor('${kind}')" title="build a new hook in the Lab, then ＋attach it here">🪝 new in Lab</button></div>`;
+}
+function elHookKind() { return NAV.cur.etype || (NAV.cur.kind === "item" ? "item" : ""); }
+function elHooksHTML(kind) {
+  return `<div class="elrow"><div class="elcell" style="flex:1"><label>🪝 hooks <span class="muted" style="font-weight:400">— ${kind}-context (proc / reaction / on-gain / … all live here now)</span></label>
+    <div id="el_hooksbox">${elHooksInner(kind)}</div></div></div>`;
+}
+function renderElHooks() { const b = document.getElementById("el_hooksbox"); if (b) b.innerHTML = elHooksInner(elHookKind()); }
+// the Lab calls this (parent.labAttachHook) after ＋attach: drop the new hook into the editor's list.
+function labAttachHook(name) {
+  if (NAV.cur.kind === "element" || NAV.cur.kind === "item") { if (!ELHOOKS.includes(name)) ELHOOKS.push(name); renderElHooks(); }
+  closeLab();
+}
+function renderElementEditor() {
+  const kind = NAV.cur.etype, player = NAV.cur.player, editing = NAV.cur.name || null;
+  const el = editing ? (findElement(player, kind, editing) || {}) : {};
+  const clean = (v) => (v == null || v === "None") ? "" : String(v);   // hide the "None" sentinel
+  const layout = ELEMENT_LAYOUT[kind] || [[["name",1]]];
+  const cell = ([f, w]) => {
+    const label = f === "name" ? kind : (EL_LABEL[f] || f);
+    const ph = f === "name" ? "identifier — no spaces, used in commands"
+             : f === "name" ? "shown on the card (optional)"
+             : (f === "proc" && kind === "effect") ? "signals to PULSE on step turns, e.g. poison_tick (comma-separated; [ ] auto-added)"
+             : f === "proc" ? "{flag:true}   AND: {a:true,b:true}   OR: {a:true},{b:true}   (the [ ] are added for you)"
+             : (kind === "effect" && f === "duration") ? "turns (e.g. 5) — OR a proc to clear on: hex_removed:true   (braces auto-added)"
+             : (kind === "quest" && f === "expiration") ? "turns (e.g. 5) · a date M/D or Y/M/D · OR a proc: hex_lifted:true"
+             : "";
+    let val = f === "name" ? (editing || "") : clean(el[f]);
+    if (kind === "effect" && f === "duration" && !val && el.clear_when && el.clear_when !== "None")
+      val = String(el.clear_when).replace(/^\[|\]$/g, "");   // edit: show the clear-when proc in the duration/until field
+    if (kind === "quest" && f === "expiration" && !val) {    // edit: surface a date/proc expiry in the single field
+      if (el.expire_on && el.expire_on !== "None") val = String(el.expire_on);
+      else if (el.expire_when && el.expire_when !== "None") val = String(el.expire_when).replace(/^\[|\]$/g, "");
+    }
+    const ro = (f === "name" && editing) ? " readonly title='the identifier is the lookup key — not editable'" : "";
+    const ctl = EL_TEXTAREA.has(f)
+      ? `<textarea id="el_${f}" rows="3" placeholder="${ph}"${ro}>${escHTML(val)}</textarea>`
+      : `<input type="text" id="el_${f}" placeholder="${ph}" value="${escAttr(val)}"${ro}>`;
+    return `<div class="elcell" style="flex:${w}"><label>${label}${f === "name" ? " *" : ""}</label>${ctl}</div>`;
+  };
+  const rows = layout.map(r => `<div class="elrow">${r.map(cell).join("")}</div>`).join("");
+  const nbtRow = `<div class="elrow"><div class="elcell" style="flex:1"><label>nbt (extra fields)</label>
+     <textarea id="el_custom" rows="2" placeholder="any extra fields — key:value, key2:value2"></textarea></div></div>`;
+  if (kind === "quest") ensureQObj(el);
+  ensureElHooks(el);
+  const builder = kind === "quest" ? questBuilderHTML() : "";
+  const verb = editing ? "Save" : "Create";
+  const cmdWord = editing ? "modify" : "new";
+  return `<div class="page">${card((editing ? "edit " : "new ") + kind,
+    `<div class="eled">${rows}${elHooksHTML(kind)}${builder}${nbtRow}
+       <div class="elactions"><button class="go" onclick="saveElement()">${verb} → stage command</button>
+         <span class="hint">stages <code>/${kind} ${cmdWord}</code> — review, then Enter.${editing ? " (merges; blank fields are left unchanged)" : ""}</span></div>
+       <div id="el_preview" class="hint" style="margin-top:6px"></div></div>`)}</div>`;
+}
+function saveElement() {
+  const kind = NAV.cur.etype, player = NAV.cur.player, editing = NAV.cur.name || null;
+  const g = (id) => ((document.getElementById(id) || {}).value || "").trim();
+  const q = (s) => '"' + s.replace(/"/g, '\\"') + '"';
+  const name = editing || g("el_name");
+  const prev = document.getElementById("el_preview");
+  if (!name) { prev.textContent = "the identifier (" + kind + ") is required."; return; }
+  const nbt = {};
+  elFields(kind).forEach(f => {
+    if (f === "name") return;
+    let val = g("el_" + f);
+    if (!val) return;
+    if (kind === "effect" && f === "duration" && !/^-?\d+$/.test(val)) {
+      nbt["clear_when"] = wrapProc(val);         // not a turn count -> a proc condition to clear on
+      return;
+    }
+    if (kind === "quest" && f === "expiration") {  // turns | a date (M/D, Y/M/D) | else a proc condition
+      if (/^-?\d+$/.test(val)) nbt["expiration"] = val;
+      else if (/^\d+\/\d+(\/\d+)?$/.test(val)) nbt["expire_on"] = val;
+      else nbt["expire_when"] = wrapProc(val);
+      return;
+    }
+    if (f === "proc") val = (kind === "effect") ? bracketList(val) : wrapProc(val);   // effect proc = signal list; talent proc = clauses
+    nbt[f] = EL_FREETEXT.has(f) ? q(val) : val;
+  });
+  let body = Object.entries(nbt).map(([k, v]) => `${k}:${v}`).join(",");
+  const custom = g("el_custom");
+  if (custom) body = body ? body + "," + custom : custom;
+  if (editing || ELHOOKS.length) body = (body ? body + "," : "") + "hooks:[" + ELHOOKS.join(",") + "]";  // attached 🪝 hooks
+  const line = `/${kind} ${editing ? "modify" : "new"} ${player} ${name}{${body}}`;   // modify MERGES
+  if (kind === "quest") {   // also stage the objectives: rebuild them (preserving each one's progress)
+    const lines = [line];
+    if (editing) lines.push(`/quest objective ${player} ${name} clear`);
+    QOBJ.forEach((o, i) => {
+      const lab = (o.label || "").trim() || "objective";
+      lines.push(`/quest objective ${player} ${name} add ${o.type} ${lab}`);
+      if (o.type === "segment" && o.goal) lines.push(`/quest objective ${player} ${name} ${i} goal ${o.goal}`);
+      const toks = String(o.proc || "").replace(/[{}\[\]]/g, "").trim();
+      if (toks) lines.push(`/quest objective ${player} ${name} ${i} proc ${toks}`);
+      const cur = Number(o.current) || 0;
+      if (cur) lines.push(`/quest objective ${player} ${name} ${i} set ${cur}`);
+    });
+    cmd.value = lines.join("\n"); cmd.focus();
+    prev.innerHTML = `staged ${lines.length} line(s) — press Enter to run them in order.`;
+    return;
+  }
+  cmd.value = line; cmd.focus();   // stage it; you press Enter to run (same as the item editor)
+  prev.innerHTML = "staged — press Enter in the console: <b>" + line.replace(/</g, "&lt;") + "</b>";
+}
+
+// ---- WORLD WHEEL -------------------------------------------------------------
+// Same pie-wheel component as the player wheel. Add segments here as the world grows — each needs a
+// unique hotkey letter (the wheel auto-resizes its wedges). Destinations are world subpages, built out
+// one at a time (placeholders for now).
+// A segment either RUNS a console command (cmd) or NAVIGATES to a subpage (dest).
+const WORLD_WHEEL = [
+  {label: "Map", key: "m", dest: "atlas"},
+  {label: "Calendar", key: "c", dest: "calendar"},
+];  // Functions moved out of World -> the top-bar 🧪 Lab (Function Lab)
+function renderWorld() {
+  const n = WORLD_WHEEL.length;
+  const segs = WORLD_WHEEL.map((it, i) => {
+    const act = it.cmd ? `send('${it.cmd}')` : `go({kind:'worldsub',dest:'${it.dest}'})`;
+    KEYMAP[it.key] = it.cmd ? () => send(it.cmd) : () => go({kind: "worldsub", dest: it.dest});
+    return {labelHTML: hkSVG(it.label, it.key), fill: `hsl(${Math.round(i * 360 / n)} 46% 46%)`, action: act};
+  });
+  return pieWheel(segs, null);  // no centre hub yet
+}
+function renderWorldSub() {
+  const dest = NAV.cur.dest;
+  if (dest === "functions") return renderFunctions();
+  if (dest === "calendar") return renderCalendar();
+  if (dest === "atlas") return renderAtlas();
+  const title = (WORLD_WHEEL.find(w => w.dest === dest) || {}).label || dest;
+  return `<div class="page">` + card(title, `<span class="muted">${title} — coming soon.</span>`) + `</div>`;
+}
+
+// ---- ATLAS (the world map) ---------------------------------------------------
+// A grid of cells colored by biome. Each cell: biome emblem (top-left), weather (top-right),
+// a ▲ if structures sit here, entity dots. The entity's SHAPE is its own symbol; its COLOR is the
+// VIEWPOINT player's allegiance toward it (ally/neutral/hostile). Fog is PER-PLAYER: Player view shows
+// only the chosen viewpoint's discovered cells; DM view shows everything (cells nobody has explored
+// are dimmed). Pick the viewpoint with the buttons in the bar.
+function renderAtlas() {
+  const map = STATE.map || {}, cells = map.cells || {};
+  const biomes = STATE.biomes || {}, weather = STATE.weather || {};
+  const keys = Object.keys(cells);
+  if (!keys.length)
+    return `<div class="page">${card("Atlas",
+      `<span class="muted">no world yet — generate one in the console: <b>/map generate 12x8</b></span>`)}</div>`;
+  let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (const k of keys) { const [x, y] = k.split(",").map(Number);
+    minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+  const entAt = {}, structAt = {};
+  (STATE.entities || []).forEach(e => (entAt[e.x + "," + e.y] = entAt[e.x + "," + e.y] || []).push(e));
+  (STATE.structures || []).forEach(s => { const p = s.pos || []; if (p.length >= 2)
+    (structAt[p[0] + "," + p[1]] = structAt[p[0] + "," + p[1]] || []).push(s); });
+
+  // player characters (not NPCs/mobs) = the possible viewpoints; pick the selected one or the first
+  const playerNames = Object.keys(STATE.players).filter(n => { const nb = STATE.players[n].nbt || {}; return !nb.npc && !nb.mob; });
+  const vp = (ATLAS_VIEW && STATE.players[ATLAS_VIEW]) ? ATLAS_VIEW : (playerNames[0] || null);
+  const vpNbt = vp ? (STATE.players[vp].nbt || {}) : {};
+  const vpAlleg = (vpNbt.allegiance && typeof vpNbt.allegiance === "object") ? vpNbt.allegiance : {};
+  const playerView = MODE === "player";
+  // fog is per-cell, persistent: cell.seen = players who've fully revealed it (BRIGHT), cell.dim = players
+  // who've only glimpsed it (DIMMED, stays dim). Player view fogs by the viewpoint; DM sees everything.
+  const seenByVp = (cell) => Array.isArray(cell.seen) && cell.seen.includes(vp);
+  const dimByVp = (cell) => Array.isArray(cell.dim) && cell.dim.includes(vp);
+  const dotColor = (e) => e.name === vp ? "#ffffff" : (ALLEGIANCE_COLOR[vpAlleg[e.name] || "neutral"] || ALLEGIANCE_COLOR.neutral);
+  ATLAS_DATA = {cells, biomes, weather, entAt, structAt, vp, vpAlleg};
+  const paintable = ATLAS_PAINT && vp;               // click-to-paint fog for the viewpoint player
+
+  let rows = "";
+  for (let y = miny; y <= maxy; y++) {
+    let row = "";
+    for (let x = minx; x <= maxx; x++) {
+      const key = x + "," + y, cell = cells[key];
+      if (!cell) { row += `<div class="acell avoid"></div>`; continue; }
+      let dim = false;
+      if (playerView) {                              // DM sees everything; player view fogs by the viewpoint
+        if (seenByVp(cell)) {}                        // fully revealed -> bright
+        else if (dimByVp(cell)) dim = true;           // glimpsed -> dim (persistent)
+        else { row += `<div class="acell afog${paintable ? " apaint" : ""}"${paintable ? ` onclick="atlasPaint('${key}')"` : ""}></div>`; continue; }
+      }
+      const b = biomes[cell.biome] || {}, w = weather[key];
+      const ents = entAt[key] || [], structs = structAt[key] || [];
+      const wTint = ATLAS_OPT.weather && WEATHER_TINT[w] ? `<div class="aweather" style="background:${WEATHER_TINT[w]}"></div>` : "";
+      const wGlyph = ATLAS_OPT.weather && w ? `<span class="aw">${WEATHER_GLYPH[w] || ""}</span>` : "";
+      const sMark = ATLAS_OPT.structures && structs.length ? `<span class="astruct">▲</span>` : "";
+      const dots = ATLAS_OPT.entities ? ents.map(e =>
+        `<span class="adot" style="color:${dotColor(e)}">${e.symbol || ENT_DOT[e.kind] || "●"}</span>`).join("") : "";
+      row += `<div class="acell${dim ? " adim" : ""}${paintable ? " apaint" : ""}" style="background:${b.color || "#333"}"
+                ${paintable ? `onclick="atlasPaint('${key}')"` : ""}
+                onmouseover="atlasHover(event,'${key}')" onmousemove="atlasMove(event)" onmouseout="atlasOut()">
+                ${wTint}<span class="abio">${b.glyph || ""}</span>${wGlyph}${sMark}
+                <span class="aents">${dots}</span></div>`;
+    }
+    rows += `<div class="arow">${row}</div>`;
+  }
+  const opt = (k, label) => `<button class="fnbtn${ATLAS_OPT[k] ? " on" : ""}" onclick="ATLAS_OPT.${k}=!ATLAS_OPT.${k};render()">${label}</button>`;
+  const vpBtns = playerNames.length
+    ? `<span class="atlasgroup"><span class="atlaslbl">viewpoint</span>${playerNames.map(n =>
+        `<button class="fnbtn${n === vp ? " on" : ""}" onclick="ATLAS_VIEW='${n.replace(/'/g, "\\'")}';render()">${escHTML(n)}</button>`).join("")}</span>`
+    : "";
+  const paintGrp = vp
+    ? `<span class="atlasgroup"><span class="atlaslbl">paint ${escHTML(vp)}'s fog</span>${["reveal", "dim", "hide"].map(m =>
+        `<button class="fnbtn${ATLAS_PAINT === m ? " on" : ""}" onclick="ATLAS_PAINT = ATLAS_PAINT === '${m}' ? null : '${m}'; render()">${m}</button>`).join("")}</span>`
+    : "";
+  const bar = `<div class="atlasbar">
+      <span class="muted">${maxx - minx + 1}×${maxy - miny + 1} · ${keys.length} cells</span>
+      <span class="atlasgroup"><span class="atlaslbl">layers</span>${opt("weather", "weather")}${opt("structures", "structures")}${opt("entities", "entities")}</span>
+      ${vpBtns}
+      <button class="fnbtn" onclick="send('/map view')" title="also print to the console">console</button>
+    </div>
+    <div class="atlasbar">${paintGrp}${paintable ? `<span class="muted">click a tile to ${ATLAS_PAINT} it for ${escHTML(vp)}</span>` : ""}</div>
+    <div class="atlasmode muted">${playerView
+        ? (vp ? `🎭 player view — ${escHTML(vp)}'s fog (bright = revealed · dim = glimpsed) &amp; allegiances` : "🎭 player view — no player characters yet")
+        : `👑 DM view — full map (hover a tile for who's been there)${vp ? `; colors from ${escHTML(vp)}'s allegiances` : ""}`}
+      <span class="atlaslegend"> · <span style="color:${ALLEGIANCE_COLOR.ally}">●</span> ally <span style="color:${ALLEGIANCE_COLOR.neutral}">●</span> neutral <span style="color:${ALLEGIANCE_COLOR.hostile}">●</span> hostile</span></div>`;
+  return `<div class="page atlaspage">${bar}<div class="atlasgrid">${rows}</div><div id="atlastip" class="atlastip"></div></div>`;
+}
+function atlasPaint(key) {     // click a tile while a paint mode is active -> /map reveal|dim|hide <vp> x y
+  const vp = ATLAS_DATA && ATLAS_DATA.vp;
+  if (!ATLAS_PAINT || !vp) return;
+  const [x, y] = key.split(",");
+  send(`/map ${ATLAS_PAINT} ${vp} ${x} ${y}`);
+}
+function atlasHover(ev, key) {
+  const t = document.getElementById("atlastip"); if (!t || !ATLAS_DATA) return;
+  const {cells, biomes, weather, entAt, structAt, vp, vpAlleg} = ATLAS_DATA;
+  const cell = cells[key] || {}, b = biomes[cell.biome] || {}, [x, y] = key.split(",");
+  let h = `<b>(${x},${y})</b> ${escHTML(b.label || cell.biome || "—")}`;
+  if (b.temperature) h += ` <span class="muted">${b.temperature}/${b.moisture}</span>`;
+  if (weather[key]) h += `<br>weather: ${escHTML(weather[key])}`;
+  const ss = structAt[key] || []; if (ss.length) h += `<br>structures: ${ss.map(s => escHTML(s.name)).join(", ")}`;
+  if (cell.name) h += `<br>★ ${escHTML(cell.name)}`;
+  if (Array.isArray(cell.seen) && cell.seen.length) h += `<br><span class="muted">seen by: ${cell.seen.map(escHTML).join(", ")}</span>`;
+  const es = entAt[key] || [];
+  if (es.length) h += `<br>here: ${es.map(e => {
+    const rel = e.name === vp ? "you" : ((vpAlleg || {})[e.name] || "neutral");
+    return escHTML(e.name) + ` <span class="muted">(${e.kind} · ${rel})</span>`;
+  }).join(", ")}`;
+  t.innerHTML = h; t.style.display = "block"; atlasMove(ev);
+}
+function atlasMove(ev) { const t = document.getElementById("atlastip");
+  if (t && t.style.display === "block") { t.style.left = (ev.clientX + 14) + "px"; t.style.top = (ev.clientY + 14) + "px"; } }
+function atlasOut() { const t = document.getElementById("atlastip"); if (t) t.style.display = "none"; }
+
+// ---- CALENDAR ----------------------------------------------------------------
+// Backend-driven (STATE.calendar). A day-clock for the day's turns; then a grid of day boxes. Each
+// box = day number + a "+" to add a note + a scrollable body of TURNS_PER_DAY turn-rows. Each row has
+// the turn tick, any player pawns sitting on that turn (today only), and colored events at that turn:
+// effect expiries, quest expiries, and manual notes (/calendar event).
+function dayClock(tod, n) {
+  const cx = 40, cy = 40, r = 33, parts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI - Math.PI / 2, on = i === tod;
+    const x1 = cx + (r - 5) * Math.cos(a), y1 = cy + (r - 5) * Math.sin(a), x2 = cx + r * Math.cos(a), y2 = cy + r * Math.sin(a);
+    const lx = cx + (r - 13) * Math.cos(a), ly = cy + (r - 13) * Math.sin(a) + 2.2;
+    parts.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="ctick ${on ? "con" : ""}"/>`);
+    parts.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="cnum ${on ? "con" : ""}">${i + 1}</text>`);
+  }
+  const a = (tod / n) * 2 * Math.PI - Math.PI / 2;
+  const hx = cx + (r - 12) * Math.cos(a), hy = cy + (r - 12) * Math.sin(a);
+  return `<div class="dayclock"><svg viewBox="0 0 80 80">
+    <circle cx="${cx}" cy="${cy}" r="${r}" class="cface"/>${parts.join("")}
+    <line x1="${cx}" y1="${cy}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" class="chand"/>
+    <circle cx="${cx}" cy="${cy}" r="2.5" class="chub"/></svg></div>`;
+}
+// a note chip: click to edit inline (text input + save/delete/cancel). save & delete STAGE the
+// command in the console (press Enter to confirm); cancel closes the editor with nothing staged.
+function noteChip(n) {
+  if (n.id === EDIT_NOTE) {
+    return `<span class="noteedit">
+      <input class="noteinput" id="noteinput" value="${escHTML(n.text)}"
+        onkeydown="if(event.key==='Enter')saveNoteEdit(${n.id});else if(event.key==='Escape')cancelNoteEdit()">
+      <button class="nbtn save" title="save — stages the command" onclick="saveNoteEdit(${n.id})">✓</button>
+      <button class="nbtn ndel" title="delete — stages the command" onclick="deleteNote(${n.id})">🗑</button>
+      <button class="nbtn ncancel" title="cancel — nothing staged" onclick="cancelNoteEdit()">✕</button></span>`;
+  }
+  return `<span class="calev ev-note editable" title="click to edit" onclick="editNote(${n.id})">${escHTML(n.text)}</span>`;
+}
+function editNote(id) { EDIT_NOTE = id; render(); const i = document.getElementById("noteinput"); if (i) { i.focus(); i.select(); } }
+function cancelNoteEdit() { EDIT_NOTE = null; render(); }
+function saveNoteEdit(id) {
+  const inp = document.getElementById("noteinput"), text = inp ? inp.value.trim() : "";
+  EDIT_NOTE = null;
+  if (text) { cmd.value = `/calendar event set ${id} ${text}`; cmd.focus(); }   // stage; press Enter to confirm
+  render();
+}
+function deleteNote(id) { EDIT_NOTE = null; cmd.value = `/calendar event remove ${id}`; cmd.focus(); render(); }
+function ordinal(n) { const s = ["th", "st", "nd", "rd"], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+// inline note creator (after clicking a day's "+"): pick a turn (or all-day) then type + add.
+function noteCreator(month, day, TPD) {
+  let opts = `<option value="">all day</option>`;
+  for (let t = 1; t <= TPD; t++) opts += `<option value="${t}">turn ${t}</option>`;
+  return `<div class="notecreate">
+    <select id="addturn" class="addturn">${opts}</select>
+    <input id="addtext" class="noteinput" placeholder="note…"
+      onkeydown="if(event.key==='Enter')commitAddNote(${month},${day});else if(event.key==='Escape')cancelAddNote()">
+    <button class="nbtn save" title="add" onclick="commitAddNote(${month},${day})">✓</button>
+    <button class="nbtn ncancel" title="cancel" onclick="cancelAddNote()">✕</button></div>`;
+}
+function startAddNote(month, day) { CAL_ADD = {month, day}; render(); const i = document.getElementById("addtext"); if (i) i.focus(); }
+function cancelAddNote() { CAL_ADD = null; render(); }
+function commitAddNote(month, day) {
+  const sel = document.getElementById("addturn"), txt = document.getElementById("addtext");
+  const turn = sel && sel.value ? parseInt(sel.value) : null;   // 1-based (display); stored 0-based
+  const text = txt ? txt.value.trim() : "";
+  CAL_ADD = null;
+  if (text) send(`/calendar event add ${month}/${day}${turn ? "." + (turn - 1) : ""} ${text}`);
+  else render();
+}
+function calDayBox(d, c, monthNum, pawnsByTurn, isCurrentMonth) {
+  const TPD = c.turns_per_day, isToday = isCurrentMonth && d.day === c.today;
+  const adding = CAL_ADD && CAL_ADD.month === monthNum && CAL_ADD.day === d.day;
+  const allDay = d.notes.filter(n => n.turn == null).map(noteChip).join("");
+  const rows = [];
+  for (let t = 0; t < TPD; t++) {
+    const pawns = isToday ? (pawnsByTurn[t] || []).map(p => `<span class="pawn" title="${escHTML(p.name)}">${escHTML(p.symbol)}</span>`).join("") : "";
+    const evs = [];
+    d.effects.filter(e => e.turn === t).forEach(e => evs.push(`<span class="calev ev-effect" title="effect ends · ${escHTML(e.text)}">${escHTML(e.text)}</span>`));
+    d.quests.filter(e => e.turn === t).forEach(e => evs.push(`<span class="calev ev-quest" title="quest expires · ${escHTML(e.text)}">${escHTML(e.text)}</span>`));
+    d.notes.filter(n => n.turn === t).forEach(n => evs.push(noteChip(n)));
+    const cur = isToday && t === c.tod;
+    rows.push(`<div class="calturn ${cur ? "curturn" : ""}"><span class="ctk">${t + 1}</span>
+      <span class="pawns">${pawns}</span><span class="cevs">${evs.join("")}</span></div>`);
+  }
+  return `<div class="calday ${isToday ? "today" : ""}">
+    <div class="calday-head"><span class="cdaynum">${d.day}</span>
+      <button class="calplus" title="add a note to day ${d.day}" onclick="startAddNote(${monthNum},${d.day})">＋</button></div>
+    ${adding ? noteCreator(monthNum, d.day, TPD) : ""}
+    ${allDay ? `<div class="calallday">${allDay}</div>` : ""}
+    <div class="calday-body">${rows.join("")}</div></div>`;
+}
+// ---- date-setter (intentional world-time changes; no auto-advance) ----
+function toggleDateSet() { CAL_DATESET = !CAL_DATESET; render(); }
+async function setDateUnit(unit, raw) {
+  const v = parseInt(raw); if (isNaN(v)) return;
+  await runOne(`/calendar set ${unit} ${unit === "time" ? v - 1 : v}`);   // turn-of-day shown 1-based, stored 0-based
+  if (CAL_VIEW) CAL_VIEW.month = STATE.calendar.current_month;            // follow the change into the view
+  render();
+}
+async function addWorldTurns(raw) {
+  const v = parseInt(raw); if (!v) return;
+  await runOne(`/turn add ${v}`);
+  if (CAL_VIEW) CAL_VIEW.month = STATE.calendar.current_month;
+  render();
+}
+function dateSetter(c) {
+  return `<div class="dateset">set:
+    turn <input class="dsi" value="${c.tod + 1}" onkeydown="if(event.key==='Enter')setDateUnit('time',this.value)">
+    day <input class="dsi" value="${c.today}" onkeydown="if(event.key==='Enter')setDateUnit('day',this.value)">
+    month <input class="dsi" value="${c.current_month}" onkeydown="if(event.key==='Enter')setDateUnit('month',this.value)">
+    year <input class="dsi" value="${c.year}" onkeydown="if(event.key==='Enter')setDateUnit('year',this.value)">
+    <span class="dssep">·</span> ± turns <input class="dsi" placeholder="±n" onkeydown="if(event.key==='Enter')addWorldTurns(this.value)">
+    <span class="hint">press Enter in a field</span></div>`;
+}
+// ---- views ----
+function calZoom(mode) { CAL_VIEW.mode = mode; render(); }
+function calOpenMonth(m) { CAL_VIEW = {mode: "month", month: m}; render(); }
+function calNavMonth(delta) {  // wraps around: ‹ from the first month jumps to the last, and vice versa
+  const n = STATE.calendar.months.length;
+  CAL_VIEW.month = ((CAL_VIEW.month - 1 + delta) % n + n) % n + 1;
+  render();
+}
+function calDateBar(c) {
+  const cm = c.months[c.current_month - 1];
+  const dateStr = `${cm.name} ${ordinal(c.today)}, ${c.year}`;   // "January 1st, 1"
+  const yearMode = CAL_VIEW.mode === "year";
+  const zoom = `<button class="calzoom" title="${yearMode ? "back to a month" : "see every month"}"
+     onclick="calZoom('${yearMode ? "month" : "year"}')">${yearMode ? "▢ month" : "⊞ all months"}</button>`;
+  return `<div class="calbar">${dayClock(c.tod, c.turns_per_day)}
+    <div class="calmeta">
+      <div class="caldateline"><button class="caldatebtn" title="set the date / add turns" onclick="toggleDateSet()">📅</button>
+        <span class="calmonth">${dateStr}</span>${zoom}</div>
+      <div class="muted">turn ${c.tod + 1}/${c.turns_per_day} · day ${c.today}/${cm.length}${c.leap ? " · leap year" : ""}</div>
+      ${CAL_DATESET ? dateSetter(c) : ""}
+      <div class="callegend"><span class="calev ev-effect">effect</span><span class="calev ev-quest">quest</span><span class="calev ev-note">note</span></div>
+    </div></div>`;
+}
+function miniDays(m, c, isCur) {
+  return m.days.map(d => {
+    const has = d.notes.length + d.effects.length + d.quests.length;
+    const today = isCur && d.day === c.today;
+    return `<span class="mday ${has ? "has" : ""} ${today ? "mtoday" : ""}" title="day ${d.day}${has ? " — " + has + " event(s)" : ""}"></span>`;
+  }).join("");
+}
+function calYearView(c) {
+  const cards = c.months.map(m => {
+    const events = m.days.reduce((a, d) => a + d.notes.length + d.effects.length + d.quests.length, 0);
+    const isCur = m.month === c.current_month;
+    return `<div class="calmonthcard ${isCur ? "curmonth" : ""}" onclick="calOpenMonth(${m.month})" title="open ${m.name}">
+      <div class="cmc-head"><span class="cmc-name">${m.name}</span><span class="cmc-len">${m.length}d${events ? ` · <span class="cmc-ev">${events}</span>` : ""}</span></div>
+      <div class="cmc-dots">${miniDays(m, c, isCur)}</div></div>`;
+  }).join("");
+  return `<div class="calyear">${cards}</div>`;
+}
+function calMonthView(c) {
+  const m = c.months[CAL_VIEW.month - 1], isCur = m.month === c.current_month;
+  const pawnsByTurn = {};
+  (c.players || []).forEach(p => (pawnsByTurn[p.turn_of_day] = pawnsByTurn[p.turn_of_day] || []).push(p));
+  const nav = `<div class="calmonthnav">
+    <button class="cnav" onclick="calNavMonth(-1)" title="previous month (wraps)">‹</button>
+    <span class="calmonthttl">${m.name}, ${c.year}${isCur ? " · current" : ""}</span>
+    <button class="cnav" onclick="calNavMonth(1)" title="next month (wraps)">›</button></div>`;
+  return nav + `<div class="calgrid">${m.days.map(d => calDayBox(d, c, m.month, pawnsByTurn, isCur)).join("")}</div>`;
+}
+function renderCalendar() {
+  const c = STATE.calendar;
+  if (!c) return `<div class="page">${card("Calendar", '<span class="muted">no calendar data.</span>')}</div>`;
+  if (!CAL_VIEW) CAL_VIEW = {mode: "month", month: c.current_month};
+  if (CAL_VIEW.month < 1 || CAL_VIEW.month > c.months.length) CAL_VIEW.month = c.current_month;
+  const body = CAL_VIEW.mode === "year" ? calYearView(c) : calMonthView(c);
+  return `<div class="page">${card("Calendar", calDateBar(c) + body)}</div>`;
+}
+
+// ---- FUNCTIONS (folder tree of /function paths) ------------------------------
+// Paths use ':' and '/' as separators — BOTH render as folder delimiters. Nodes are keyed by their
+// full prefix string, so 'a:b' and 'a/b' stay distinct (they're different functions). Every row keeps
+// run/edit buttons in a fixed left column so they stay aligned no matter how deep the tree node sits.
+function escHTML(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function splitFuncPath(path) {                 // 'name:talents/death' -> [{seg:'name',delim:''},{seg:'talents',delim:':'},{seg:'death',delim:'/'}]
+  const parts = String(path).split(/([:/])/);  // ['name',':','talents','/','death']
+  const out = [{seg: parts[0], delim: ""}];
+  for (let i = 1; i < parts.length; i += 2) out.push({delim: parts[i], seg: parts[i + 1] || ""});
+  return out;
+}
+function buildFuncTree(funcs) {
+  const root = {children: {}, order: []};
+  Object.keys(funcs).sort().forEach(path => {
+    let node = root, prefix = "";
+    splitFuncPath(path).forEach(({seg, delim}) => {
+      prefix = prefix ? prefix + delim + seg : seg;
+      if (!node.children[prefix]) { node.children[prefix] = {seg, delim, prefix, children: {}, order: [], isFunc: false}; node.order.push(prefix); }
+      node = node.children[prefix];
+    });
+    node.isFunc = true;   // the full path IS a real function (vs an intermediate folder)
+  });
+  return root;
+}
+function funcRowHTML(node, guide) {
+  const path = node.prefix;
+  const buttons = node.isFunc
+    ? `<button class="fnbtn run" title="run — /function run ${path}" onclick="send('/function run ${path}')">▶</button>
+       <button class="fnbtn edit" title="edit" onclick="go({kind:'fnedit',path:'${path}'})">✎</button>
+       <button class="fnbtn del" title="delete — stages the command; press Enter to confirm"
+         onclick="cmd.value='/function remove ${path}'; cmd.focus()">🗑</button>`
+    : `<span class="fnspacer"></span>`;
+  const seg = `<span class="fnseg ${node.isFunc ? "" : "fnfolder"}">${node.delim ? `<span class="fndelim">${node.delim}</span>` : ""}${escHTML(node.seg)}</span>`;
+  return `<div class="fnrow"><span class="fnbtns">${buttons}</span><span class="fntree">${guide}${seg}</span></div>`;
+}
+function funcRows(funcs) {
+  const root = buildFuncTree(funcs), rows = [];
+  (function walk(node, bars) {                 // bars[i] = ancestor at depth i has more siblings (draw │)
+    node.order.forEach((k, i) => {
+      const child = node.children[k], last = i === node.order.length - 1;
+      let guide = "";
+      if (bars.length) {                        // depth >= 1 gets connectors; top level has none
+        guide = bars.slice(0, -1).map((b, idx) => (b && idx > 0) ? '<span class="fgbar">│</span>  ' : "   ").join("");
+        guide += `<span class="fgbar">${last ? "└─" : "├─"}</span> `;
+      }
+      rows.push(funcRowHTML(child, guide));
+      walk(child, bars.concat([!last]));
+    });
+  })(root, []);
+  return rows;
+}
+function renderFunctions() {
+  const funcs = STATE.functions || {};
+  ADD_ACTION = () => go({kind: "fnedit", path: null});
+  const add = `<span class="addchip" onclick="go({kind:'fnedit',path:null})">＋ new function</span>`;
+  const body = Object.keys(funcs).length
+    ? `<div class="fntreebox">${funcRows(funcs).join("")}</div>`
+    : `<span class="muted">no functions yet — press <b>+</b> to write one.</span>`;
+  return `<div class="page">${card("Functions", add + body)}</div>`;
+}
+
+// ---- FUNCTION EDITOR (numbered-rows document) --------------------------------
+function renderFnEditor() {
+  const path = NAV.cur.path, funcs = STATE.functions || {};
+  const body = (path && funcs[path] || []).join("\n");
+  const nLines = Math.max(1, body.split("\n").length);
+  return `<div class="page">${card(path ? "edit function" : "new function",
+    `<div class="fneditor">
+       <div class="row"><label class="f">path</label>
+         <input id="fn_path" class="fnpath" placeholder="path — e.g. name:talents/death" value="${escHTML(path || "")}"></div>
+       <div class="fndoc">
+         <div class="fngutter" id="fngutter">${fnGutterHTML(nLines)}</div>
+         <textarea id="fnbody" class="fnbodyta" spellcheck="false"
+           oninput="fnSyncGutter();fnShowAC()" onclick="fnShowAC()" onkeyup="fnCaretKey(event)"
+           onkeydown="fnKey(event)" onscroll="fnSyncScroll()" onblur="setTimeout(fnHideAC,120)"
+           placeholder="one command per line — each line autocompletes like the console, e.g.&#10;/tellraw @s hello&#10;/stat modify @s health add 5">${escHTML(body)}</textarea>
+       </div>
+       <div id="fnac" class="fnac"></div>
+       <div class="elactions"><button class="go" onclick="saveFunction()">Save</button>
+         <span class="hint">each line is a console command (Tab completes · click a line number to select the row · stored literally — dice/@s resolve at run time)</span></div>
+       <div id="fn_preview" class="hint"></div>
+     </div>`)}</div>`;
+}
+function fnGutterHTML(n) {   // each line number is clickable -> selects that whole row in the textarea
+  return Array.from({length: n}, (_, i) =>
+    `<div class="fnln" onmousedown="event.preventDefault();fnSelectLine(${i})">${i + 1}</div>`).join("");
+}
+function fnSyncGutter() {
+  const ta = document.getElementById("fnbody"), g = document.getElementById("fngutter");
+  if (!ta || !g) return;
+  g.innerHTML = fnGutterHTML(Math.max(1, ta.value.split("\n").length));
+  g.scrollTop = ta.scrollTop;
+}
+function fnSyncScroll() {
+  const ta = document.getElementById("fnbody"), g = document.getElementById("fngutter");
+  if (ta && g) g.scrollTop = ta.scrollTop;
+}
+// click a gutter number -> select the WHOLE line (incl. its trailing newline, except the last line)
+// so you can immediately Delete / Ctrl-X the row.
+function fnSelectLine(idx) {
+  const ta = document.getElementById("fnbody"); if (!ta) return;
+  const lines = ta.value.split("\n");
+  idx = Math.max(0, Math.min(idx, lines.length - 1));
+  let start = 0;
+  for (let i = 0; i < idx; i++) start += lines[i].length + 1;
+  const end = idx < lines.length - 1 ? start + lines[idx].length + 1 : start + lines[idx].length;
+  ta.focus(); ta.setSelectionRange(start, end);
+  fnHideAC();
+}
+
+// ---- per-line autofill: every textarea line completes like a fresh console line ----
+let fnAcItems = [], fnAcSel = -1, _fnCW = 0;
+function fnAc() { return document.getElementById("fnac"); }
+function fnAcOpen() { const b = fnAc(); return b && b.style.display === "block"; }
+function fnHideAC() { const b = fnAc(); if (b) b.style.display = "none"; fnAcItems = []; fnAcSel = -1; }
+function fnCurToken(ta) { return ta.value.slice(0, ta.selectionStart).split(/[ {,>\n]/).pop(); }
+function fnCharWidth(font) {
+  if (_fnCW) return _fnCW;
+  const s = document.createElement("span");
+  s.style.cssText = "position:absolute;visibility:hidden;white-space:pre"; s.style.font = font;
+  s.textContent = "M".repeat(20); document.body.appendChild(s);
+  _fnCW = s.getBoundingClientRect().width / 20; document.body.removeChild(s);
+  return _fnCW;
+}
+async function fnShowAC() {
+  const ta = document.getElementById("fnbody"), box = fnAc();
+  if (!ta || !box) return;
+  const before = ta.value.slice(0, ta.selectionStart);
+  const line = before.slice(before.lastIndexOf("\n") + 1);   // the current line, up to the caret
+  if (!line.trim()) return fnHideAC();
+  fnAcItems = await (await fetch("/complete?line=" + encodeURIComponent(line))).json();
+  if (!fnAcItems.length) return fnHideAC();
+  fnAcSel = -1;
+  box.innerHTML = fnAcItems.map((c, i) => `<div onmousedown="event.preventDefault();fnAcceptAC(${i})">${escHTML(c)}</div>`).join("");
+  const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 19.5, cw = fnCharWidth(cs.font);
+  const lineIdx = (before.match(/\n/g) || []).length, col = ta.selectionStart - (before.lastIndexOf("\n") + 1);
+  box.style.top = (ta.offsetTop + (parseFloat(cs.paddingTop) || 8) + (lineIdx + 1) * lh - ta.scrollTop) + "px";
+  box.style.left = (ta.offsetLeft + (parseFloat(cs.paddingLeft) || 10) + col * cw - ta.scrollLeft) + "px";
+  box.style.display = "block";
+}
+function fnMoveSel(d) {
+  fnAcSel = (fnAcSel + d + fnAcItems.length) % fnAcItems.length;
+  [...fnAc().children].forEach((el, i) => el.className = i === fnAcSel ? "sel" : "");
+}
+function fnReplaceToken(s, addSpace) {
+  const ta = document.getElementById("fnbody"), caret = ta.selectionStart;
+  const tok = ta.value.slice(0, caret).split(/[ {,>\n]/).pop(), start = caret - tok.length;
+  const ins = s + (addSpace ? " " : "");
+  ta.value = ta.value.slice(0, start) + ins + ta.value.slice(caret);
+  const pos = start + ins.length;
+  ta.focus(); ta.setSelectionRange(pos, pos); fnSyncGutter();
+}
+function fnAcceptAC(i) { if (fnAcItems[i] == null) return; fnReplaceToken(fnAcItems[i], true); fnHideAC(); fnShowAC(); }
+function fnTab() {
+  if (!fnAcItems.length) return;
+  if (fnAcSel >= 0) return fnAcceptAC(fnAcSel);
+  if (fnAcItems.length === 1) return fnAcceptAC(0);
+  const lcp = commonPrefix(fnAcItems), ta = document.getElementById("fnbody");
+  if (lcp.length > fnCurToken(ta).length) { fnReplaceToken(lcp, false); fnShowAC(); return; }
+  fnMoveSel(1);
+}
+function fnKey(e) {                            // Tab/arrows/Enter/Esc while the popup is open
+  if (e.key === "Tab") { e.preventDefault(); fnTab(); return; }
+  if (!fnAcOpen()) return;
+  if (e.key === "ArrowDown") { e.preventDefault(); fnMoveSel(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); fnMoveSel(-1); }
+  else if (e.key === "Enter" && fnAcSel >= 0) { e.preventDefault(); fnAcceptAC(fnAcSel); }   // else Enter = newline
+  else if (e.key === "Escape") { e.preventDefault(); fnHideAC(); }
+}
+function fnCaretKey(e) {                        // arrow/click caret moves refresh the suggestions
+  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) fnShowAC();
+}
+async function saveFunction() {
+  const path = ((document.getElementById("fn_path") || {}).value || "").trim().split(/\s+/)[0];
+  const prev = document.getElementById("fn_preview");
+  if (!path) { prev.textContent = "path is required."; return; }
+  const body = ((document.getElementById("fnbody") || {}).value || "").split("\n").map(s => s.trim()).filter(Boolean);
+  await runOne(`/function edit ${path}\n${body.join("\n")}`);   // ONE POST — runOne doesn't split on newlines (runCmd would)
+  back();                                                       // return to the functions list (it re-renders from the fresh STATE)
+}
+
+// ---- INVENTORY ---------------------------------------------------------------
+const ARMOR = new Set(["helmet","pauldrons","chestplate","gauntlets","poleyn","graves","rerebrace","vambrace","leggings","sabatons"]);
+const CLOTHING = new Set(["tunic","robe","pants","socks"]);
+function slotCat(s) { return ARMOR.has(s) ? "armor" : CLOTHING.has(s) ? "clothing" : "accessories"; }
+const HANDS = ["main_hand", "off_hand"];
+// the item's icon is whatever emoji/unicode you typed in the editor (nbt `emoji`); blank if none.
+function emojiFor(repr) { return nbtVal(repr, "emoji"); }
+function typeOf(repr) { return repr.split("{")[0]; }
+
+function renderInventory() {
+  const p = STATE.players[NAV.cur.player], player = NAV.cur.player;
+  ADD_ACTION = () => go({kind: "item", player, item: null});   // '=' -> new item
+  const slotCaps = (p.nbt && p.nbt.equip_slots) || {};         // slot -> capacity (race-seeded)
+  const equipped = p.equipment || {};                          // slot -> [reprs]
+  const allSlots = Array.from(new Set([...Object.keys(slotCaps), ...Object.keys(equipped)]));
+  // group worn slots into the three colour zones (hand slots handled in the weapons block)
+  const zones = {armor: [], accessories: [], clothing: []};
+  for (const slot of allSlots) {
+    if (HANDS.includes(slot)) continue;
+    (zones[slotCat(slot)]).push(slot);
+  }
+  const invItems = p.items || [];
+  // each item's command id is its UUID (exact — handles spaces + duplicate names); label is name||type.
+  const refOf = (r) => ({label: nbtVal(r, "name") || typeOf(r), uuid: nbtVal(r, "uuid")});
+  // one equipment chip: worn (gold box = click to unequip) | available (click to equip) | dimmed if full.
+  const chipFor = (slot, ref, worn, full) =>
+    `<span class="chip${worn ? " on" : (full ? " full" : "")}" title="${worn ? "unequip" : full ? "slot full" : "equip"} (${ref.uuid})"
+      ${(worn || !full) ? `onclick="toggleEquip('${player}','${slot}','${ref.uuid}',${worn ? 1 : 0})"` : ""}><span class="box"></span>${ref.label}</span>`;
+  // body-coverage % (the slot TYPE's share of the body): per-player override, else the body_coverage.csv default.
+  const covOf = (slot) => {
+    const o = (p.nbt && p.nbt.coverage) || {}, g = STATE.body_coverage || {};
+    if (o[slot] != null) return Number(o[slot]) || 0;
+    const norm = slot.toLowerCase().replace(/s$/, "");
+    return Number(g[slot] != null ? g[slot] : (g[norm] != null ? g[norm] : 0)) || 0;
+  };
+  const capOf = (slot) => { const c = slotCaps[slot]; return (c != null ? Number(c) : (equipped[slot] || []).length) || 1; };
+  const trim = (n) => Math.round(n * 100) / 100;   // up to 2 decimals (e.g. 2/3 = 0.67, 12/4 = 3)
+  // editable 00% field + a proportion bar; the type % is SPLIT across the slot's instances (capacity):
+  // 12% over 2 vambraces -> 6% each; over 4 (four-armed) -> 3% each. The split shows as a bare gray %.
+  const covCell = (slot) => { const c = covOf(slot), cap = capOf(slot), per = trim(c / cap);
+    const split = cap > 1 ? `<span class="covper" title="${per}% each — ${c}% split across ${cap}">${per}%</span>` : "";
+    return `<div class="covcell" title="${slot}: ${c}% of the body (this slot's whole share)">
+      <div class="covtop"><input class="covinput" value="${c}%" title="body coverage 0–100%"
+        onkeydown="if(event.key==='Enter'){covEdit('${player}','${slot}',this.value);}" onblur="covEdit('${player}','${slot}',this.value)">${split}</div>
+      <div class="covbar"><span class="covfill" style="width:${Math.max(0, Math.min(100, c))}%"></span></div></div>`; };
+  // a slot row: one chip per worn item + one per inventory item that fits — toggle each individually (capacity-aware).
+  const slotRow = (slot, candReprs) => {
+    const cap = capOf(slot);
+    const wornReprs = equipped[slot] || [], wornUuids = new Set(wornReprs.map(r => nbtVal(r, "uuid")));
+    const full = wornReprs.length >= cap;
+    const offer = candReprs.filter(r => !wornUuids.has(nbtVal(r, "uuid")));
+    const chips = wornReprs.map(r => chipFor(slot, refOf(r), true, full)).join("")
+                + offer.map(r => chipFor(slot, refOf(r), false, full)).join("");
+    return `<div class="slotrow">${covCell(slot)}<label>${slot} (${wornReprs.length}/${cap})</label>
+       <div class="chips">${chips || `<span class="muted">—</span>`}</div></div>`;
+  };
+  const fitsSlot = (slot) => invItems.filter((r, i) => nbtList(invItems[i], "equippable").includes(slot));
+  const zone = (cat) => {   // a category's coverage should total 100% — show the running sum, flag it when it isn't
+    const total = trim(zones[cat].reduce((a, s) => a + covOf(s), 0));
+    const tot = zones[cat].length ? `<span class="zonetot ${Math.round(total) !== 100 ? "bad" : ""}">— ${total}%</span>` : "";
+    return `<div class="zone ${cat}"><h4>${cat} ${tot}</h4>${
+      zones[cat].length ? zones[cat].map(s => slotRow(s, fitsSlot(s))).join("") : `<span class="muted">no ${cat} slots</span>`}</div>`;
+  };
+
+  // weapons: candidates = inventory items whose `wield` matches this hand (equip routes by the item's wield).
+  const wieldFits = (slot) => { const want = slot === "main_hand" ? ["main", "both"] : ["off", "both"];
+    return invItems.filter(r => want.includes(nbtVal(r, "wield"))); };
+  const handRow = (slot) => slotRow(slot, wieldFits(slot));
+  const extraHands = allSlots.filter(s => s.includes("hand") && !HANDS.includes(s));
+
+  // radar charts — wired to the player's LIVE stats (these keys already exist in the backend).
+  const S = p.stats || {}, v = (k) => Number(S[k] || 0);
+  const radars = [
+    radar("Physical Damage", ["Bludgeon","Slash","Pierce"], [v("bludgeon"),v("slash"),v("pierce")], null, "#d98a8a", "#c0392b"),
+    radar("Physical Penetration", ["Bludgeon","Slash","Pierce"],
+          [v("bludgeon_penetration"),v("slash_penetration"),v("pierce_penetration")], null, "#e0b27a", "#b8702a"),
+    radar("Magical Damage", ["Arcana","Aether","Ethereal","Ichor"],
+          [v("arcana"),v("aether"),v("ethereal"),v("ichor")], null, "#b9a8d8", "#6a4fb5"),
+    radar("Physical Resistance", ["Bludgeon","Slash","Pierce"],
+          [v("bludgeon_resistance"),v("slash_resistance"),v("pierce_resistance")], null, "#8aa9d9", "#2c6fb5"),
+    radar("Magical Ward", ["Ichor","Arcana","Aether","Ethereal"],
+          [v("ichor_ward"),v("arcana_ward"),v("aether_ward"),v("ethereal_ward")], null, "#8fc3a8", "#2f8f63"),
+  ].join("");
+
+  return `<div class="page"><div class="invgrid">
+    <div>
+      <div class="card"><h3>Equipment</h3>${zone("armor")}${zone("accessories")}${zone("clothing")}</div>
+      <div class="card"><h3>Weapons</h3>${handRow("main_hand")}${handRow("off_hand")}${
+        extraHands.map(handRow).join("")}</div>
+    </div>
+    <div>
+      <div class="card"><h3>Gear Stats</h3>
+        <div class="radars">${radars}</div>
+        <div class="flatbox" style="margin-top:8px"><h3 style="margin:0 0 6px">Flat Defense</h3>
+          ${kv({"armor class": v("armor_class"), "defense": v("defense")})}
+          </div>
+      </div>
+    </div>
+  </div>
+  <div class="card"><h3>Items <span class="addchip" style="margin-left:8px;font-size:13px;padding:3px 10px"
+      onclick="invNewContainer('${player}')">＋ container</span></h3>${renderGridInventory(p, player)}</div>
+  </div>`;
+}
+
+// ==== GRID INVENTORY (containers + drag/rotate + loose bin) ====================
+const GCELL = 30, GGAP = 3, GSTEP = GCELL + GGAP;   // px per cell + gap
+function parsePos(repr) {   // pos:{c:base,x:2,y:0,r:90} -> {c,x,y,r} (null if unplaced)
+  const inner = nbtDict(repr, "pos");
+  if (!inner.c && inner.x == null && inner.y == null) return null;
+  const strip = (v) => String(v == null ? "" : v).replace(/^"|"$/g, "");
+  return {c: strip(inner.c), x: parseInt(inner.x) || 0, y: parseInt(inner.y) || 0, r: parseInt(inner.r) || 0};
+}
+function rotateCells(cells, rot) {   // turn a [[r,c]...] footprint by rot°, re-normalized to origin 0,0
+  rot = ((rot % 360) + 360) % 360;
+  let cs = cells.map(c => [c[0], c[1]]);
+  for (let i = 0; i < rot / 90; i++) cs = cs.map(([r, c]) => [c, -r]);   // 90° CW: (r,c)->(c,-r)
+  const minR = Math.min(...cs.map(c => c[0])), minC = Math.min(...cs.map(c => c[1]));
+  return cs.map(([r, c]) => [r - minR, c - minC]);
+}
+function hexA(hex, a) {   // "#8a6" / "#88aa66" -> rgba() with alpha (transparent fill behind a grid)
+  let h = (hex || "#6f8fae").replace("#", "");
+  if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  const n = parseInt(h, 16) || 0x6f8fae;
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function _hashHue(s) {   // stable 0..359 hue from a string -> distinct, consistent color per item
+  let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+function _hslHex(h, s, l) {   // h 0..360, s/l 0..1 -> "#rrggbb"
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, "0"); };
+  return "#" + f(0) + f(8) + f(4);
+}
+function itemColor(repr) {   // explicit nbt color wins; else a stable, distinct color hashed from uuid
+  const c = nbtVal(repr, "color"); if (c) return c.startsWith("#") ? c : ("#" + c);
+  return _hslHex(_hashHue(nbtVal(repr, "uuid") || typeOf(repr) || "x"), 0.5, 0.55);
+}
+function itemShapeCells(repr) { return parseCells(_bracketInner(repr, "shape")); }
+function reprByUuid(player, uuid) {
+  const p = STATE.players[player]; return (p.items || []).find(r => nbtVal(r, "uuid") === uuid) || "";
+}
+function gItemHTML(repr, player) {   // an absolutely-positioned placed item inside a container grid
+  const uuid = nbtVal(repr, "uuid"), pos = parsePos(repr) || {x: 0, y: 0, r: 0};
+  let cells = itemShapeCells(repr); if (!cells.length) cells = [[0, 0]];
+  cells = rotateCells(cells, pos.r);
+  const maxR = Math.max(...cells.map(c => c[0])), maxC = Math.max(...cells.map(c => c[1]));
+  const col = itemColor(repr);
+  const body = cells.map(([r, c]) =>
+    `<div class="gicell" style="left:${c * GSTEP}px;top:${r * GSTEP}px;width:${GCELL}px;height:${GCELL}px;background:${hexA(col, 0.42)};border-color:${col}"></div>`).join("");
+  const w = (maxC + 1) * GSTEP - GGAP, h = (maxR + 1) * GSTEP - GGAP;
+  return `<div class="gitem" data-uuid="${uuid}" style="left:${pos.x * GSTEP}px;top:${pos.y * GSTEP}px;width:${w}px;height:${h}px"
+       title="${typeOf(repr)} — drag to move · R to rotate · double-click to edit"
+       onmousedown="invDragStart(event,'${player}','${uuid}')" ondblclick="invEditItem('${player}','${uuid}')">
+    ${body}<span class="giem">${emojiFor(repr) || "▪"}</span></div>`;
+}
+function invContainerHTML(cont, placed, player) {
+  const cells = (cont.cells || []).map(c => [parseInt(c[0]), parseInt(c[1])]);
+  const radius = cont.style === "sharp" ? "3px" : cont.style === "pill" ? "26px" : "14px";
+  if (!cells.length) return "";
+  const minR = Math.min(...cells.map(c => c[0])), minC = Math.min(...cells.map(c => c[1]));
+  const maxR = Math.max(...cells.map(c => c[0])), maxC = Math.max(...cells.map(c => c[1]));
+  const rows = maxR - minR + 1, cols = maxC - minC + 1;
+  const slots = cells.map(([r, c]) =>
+    `<div class="gcell" data-container="${cont.id}" data-r="${r - minR}" data-c="${c - minC}"
+       style="left:${(c - minC) * GSTEP}px;top:${(r - minR) * GSTEP}px;width:${GCELL}px;height:${GCELL}px"></div>`).join("");
+  const items = placed.map(r => gItemHTML(r, player)).join("");
+  const base = cont.source === "base" || !cont.source;
+  const tools = base
+    ? `<span class="ctool" title="edit container" onclick="invEditContainer('${player}','${cont.id}')">✎</span>`
+    : `<span class="muted" title="from ${cont.source}" style="font-size:10px">⛓ ${cont.source}</span>`;
+  return `<div class="invcontainer" style="border-color:${cont.color || '#6f8fae'};border-radius:${radius};background:${hexA(cont.color, 0.1)}">
+    <div class="invhead"><b>${cont.label || cont.id}</b> <span class="muted">${cols}×${rows}</span>${tools}</div>
+    <div class="invgridwrap" data-container="${cont.id}" style="width:${cols * GSTEP - GGAP}px;height:${rows * GSTEP - GGAP}px">${slots}${items}</div>
+  </div>`;
+}
+function renderGridInventory(p, player) {
+  const items = (p.items || []), conts = p.inventory_space || [];
+  const contIds = new Set(conts.map(c => String(c.id)));
+  // split items: placed (valid pos.c + a footprint) vs loose (no footprint, or unplaced/dangling)
+  const placedBy = {}; const loose = [];
+  items.forEach((r, i) => {
+    const shape = itemShapeCells(r), pos = parsePos(r);
+    if (shape.length && pos && contIds.has(pos.c)) (placedBy[pos.c] = placedBy[pos.c] || []).push(r);
+    else loose.push({r, i, shaped: shape.length > 0});
+  });
+  const containers = conts.map(c => invContainerHTML(c, placedBy[String(c.id)] || [], player)).join("");
+  const looseCells = `<div class="itembox add" title="new item" onclick="go({kind:'item',player:'${player}',item:null})">+</div>`
+    + loose.map(o => `<div class="itembox${o.shaped ? " shaped" : ""}" data-uuid="${nbtVal(o.r, 'uuid')}"
+         title="${typeOf(o.r)}${o.shaped ? ' — drag into a container · double-click to edit' : ' — no footprint · double-click to edit'}"
+         ${o.shaped ? `onmousedown="invDragStart(event,'${player}','${nbtVal(o.r, 'uuid')}')"` : ""}
+         ondblclick="invEditItem('${player}','${nbtVal(o.r, 'uuid')}')"
+         onclick="go({kind:'item',player:'${player}',item:${o.i}})">
+         <div class="em">${emojiFor(o.r)}</div><div class="n">${typeOf(o.r)}</div></div>`).join("");
+  return `<div class="invwrap">${containers}</div>
+    <div class="loosebin" data-loose="1"><h4>Loose / Pocketed <span class="muted">— no footprint, or not placed</span></h4>
+      <div class="itemgrid">${looseCells}</div></div>`;
+}
+function invEditItem(player, uuid) {
+  const p = STATE.players[player], i = (p.items || []).findIndex(r => nbtVal(r, "uuid") === uuid);
+  if (i >= 0) go({kind: "item", player, item: i});
+}
+async function runInv(line) { await runOne(line); render(); }
+
+// ---- drag / rotate -----------------------------------------------------------
+let INVDRAG = null;
+function invDragStart(ev, player, uuid) {
+  ev.preventDefault(); ev.stopPropagation();
+  const repr = reprByUuid(player, uuid);
+  let cells = itemShapeCells(repr); if (!cells.length) return;   // no footprint -> not draggable
+  const pos = parsePos(repr), rot = pos ? pos.r : 0;
+  // which footprint cell did the cursor grab? (in the CURRENT rotation) -> keep the item anchored there
+  let gi = 0;
+  const host = ev.currentTarget;
+  if (host && host.getBoundingClientRect) {
+    const rect = host.getBoundingClientRect();
+    const gr = Math.floor((ev.clientY - rect.top) / GSTEP), gc = Math.floor((ev.clientX - rect.left) / GSTEP);
+    const rcells = rotateCells(cells, rot);
+    const idx = rcells.findIndex(([r, c]) => r === gr && c === gc);
+    if (idx >= 0) gi = idx;
+  }
+  INVDRAG = {player, uuid, cells, rot, gi, moved: false};
+  const ghost = document.createElement("div"); ghost.id = "invghost"; ghost.className = "invghost";
+  document.body.appendChild(ghost); invGhostDraw(ev);
+  document.addEventListener("mousemove", invDragMove);
+  document.addEventListener("mouseup", invDragEnd);
+  document.addEventListener("keydown", invDragKey);
+}
+function invGhostDraw(ev) {
+  const g = document.getElementById("invghost"); if (!g) return;
+  const cells = rotateCells(INVDRAG.cells, INVDRAG.rot);
+  g.innerHTML = cells.map(([r, c]) =>
+    `<div class="gicell" style="left:${c * GSTEP}px;top:${r * GSTEP}px;width:${GCELL}px;height:${GCELL}px"></div>`).join("");
+  g.style.left = (ev.clientX + 6) + "px"; g.style.top = (ev.clientY + 6) + "px";
+}
+function invDragMove(ev) { if (INVDRAG) { INVDRAG.moved = true; invGhostDraw(ev); } }
+function invDragKey(ev) {
+  if (INVDRAG && (ev.key === "r" || ev.key === "R")) { ev.preventDefault(); INVDRAG.rot = (INVDRAG.rot + 90) % 360; invGhostDraw(ev); }
+}
+function invDragEnd(ev) {
+  document.removeEventListener("mousemove", invDragMove);
+  document.removeEventListener("mouseup", invDragEnd);
+  document.removeEventListener("keydown", invDragKey);
+  const g = document.getElementById("invghost"); if (g) g.remove();
+  const d = INVDRAG; INVDRAG = null;
+  if (!d) return;
+  const el = document.elementFromPoint(ev.clientX, ev.clientY);
+  const cell = el && el.closest ? el.closest(".gcell") : null;
+  const wrap = el && el.closest ? el.closest(".invgridwrap") : null;
+  const loose = el && el.closest ? el.closest(".loosebin") : null;
+  if (loose) { runInv(`/item place ${d.player} ${d.uuid} __loose__ 0 0`); return; }
+  let cid, dropR, dropC;
+  if (cell) { cid = cell.dataset.container; dropR = +cell.dataset.r; dropC = +cell.dataset.c; }
+  else if (wrap) { cid = wrap.dataset.container; const rect = wrap.getBoundingClientRect();
+    dropC = Math.floor((ev.clientX - rect.left) / GSTEP); dropR = Math.floor((ev.clientY - rect.top) / GSTEP); }
+  else { if (d.moved) render(); return; }   // dropped nowhere: snap back
+  // anchor at the grabbed cell: the cell under the cursor on drop should be the cell that was grabbed
+  const rcells = rotateCells(d.cells, d.rot);
+  const [gr, gc] = rcells[d.gi] || [0, 0];
+  const x = dropC - gc, y = dropR - gr;
+  // no overlap: place at the intended spot if it fits the container mask AND is free; else snap to the
+  // nearest free spot that fits; if nothing fits anywhere, snap back (leave the item where it was).
+  const info = containerInfo(d.player, cid, d.uuid);
+  if (!info) { if (d.moved) render(); return; }
+  const spot = fits(info, rcells, x, y) ? {x, y} : nearestFit(info, rcells, x, y);
+  if (!spot) { if (d.moved) render(); return; }
+  runInv(`/item place ${d.player} ${d.uuid} ${cid} ${spot.x} ${spot.y} ${d.rot}`);
+}
+function containerInfo(player, cid, excludeUuid) {
+  // {valid, occ, rows, cols} for a container: valid = its cell mask (normalized "r,c"), occ = cells
+  // already taken by OTHER placed items. Mask-aware so non-rectangular grids and holes are respected.
+  const c = (STATE.players[player].inventory_space || []).find(x => String(x.id) === cid);
+  if (!c || !(c.cells || []).length) return null;
+  const cells = c.cells.map(p => [parseInt(p[0]), parseInt(p[1])]);
+  const minR = Math.min(...cells.map(p => p[0])), minC = Math.min(...cells.map(p => p[1]));
+  const valid = new Set(cells.map(([r, k]) => (r - minR) + "," + (k - minC)));
+  const rows = Math.max(...cells.map(p => p[0])) - minR + 1, cols = Math.max(...cells.map(p => p[1])) - minC + 1;
+  const occ = new Set();
+  (STATE.players[player].items || []).forEach(r => {
+    if (nbtVal(r, "uuid") === excludeUuid) return;
+    const pos = parsePos(r); if (!pos || pos.c !== cid) return;
+    let sh = itemShapeCells(r); if (!sh.length) return;
+    sh = rotateCells(sh, pos.r);
+    sh.forEach(([rr, cc]) => occ.add((pos.y + rr) + "," + (pos.x + cc)));
+  });
+  return {valid, occ, rows, cols};
+}
+function fits(info, rcells, x, y) {   // footprint rcells (normalized) placed top-left at (x,y)
+  return rcells.every(([r, c]) => {
+    const key = (y + r) + "," + (x + c);
+    return info.valid.has(key) && !info.occ.has(key);
+  });
+}
+function nearestFit(info, rcells, x0, y0) {   // closest free, in-mask placement to the intended (x0,y0)
+  let best = null, bestDist = Infinity;
+  for (let y = 0; y < info.rows; y++) for (let x = 0; x < info.cols; x++) {
+    if (!fits(info, rcells, x, y)) continue;
+    const dist = (x - x0) * (x - x0) + (y - y0) * (y - y0);
+    if (dist < bestDist) { bestDist = dist; best = {x, y}; }
+  }
+  return best;
+}
+
+// ---- container customization -------------------------------------------------
+function invNewContainer(player) {
+  // a blank container opened in the SAME editor (id field shown only when creating).
+  // starts as a usable 4×3 grid you can reshape/resize before saving.
+  const blank = {id: "", label: "", color: "#6f8fae", style: "round",
+                 cells: [[0, 0], [0, 1], [0, 2], [0, 3], [1, 0], [1, 1], [1, 2], [1, 3], [2, 0], [2, 1], [2, 2], [2, 3]]};
+  CONTEDIT = {player, cid: null, isNew: true}; ensureContCells(blank); openContEditor(blank);
+}
+function invEditContainer(player, cid) {
+  const c = (STATE.players[player].inventory_space || []).find(x => String(x.id) === cid); if (!c) return;
+  CONTEDIT = {player, cid, isNew: false}; ensureContCells(c); openContEditor(c);
+}
+let CONTEDIT = null, CONT_CELLS = new Set();
+function normHex(hex) {   // -> #rrggbb for <input type=color>
+  let h = (hex || "#6f8fae").replace("#", "");
+  if (h.length === 3) h = h.split("").map(c => c + c).join("");
+  return "#" + (h.length === 6 ? h : "6f8fae");
+}
+function ensureContCells(c) {
+  CONT_CELLS = new Set();
+  (c.cells || []).forEach(x => CONT_CELLS.add(parseInt(x[0]) + "," + parseInt(x[1])));
+  if (!CONT_CELLS.size) CONT_CELLS.add("0,0");
+}
+function contBounds() {
+  const rs = [0], cs = [0];
+  CONT_CELLS.forEach(k => { const [r, c] = k.split(",").map(Number); rs.push(r); cs.push(c); });
+  return {r0: Math.min(...rs) - 1, r1: Math.max(...rs) + 1, c0: Math.min(...cs) - 1, c1: Math.max(...cs) + 1};
+}
+function contToggleCell(r, c) {
+  const k = r + "," + c;
+  if (CONT_CELLS.has(k)) CONT_CELLS.delete(k); else CONT_CELLS.add(k);
+  const el = document.getElementById("ce_grid"); if (el) el.innerHTML = contGridHTML();
+}
+function contGridHTML() {
+  const b = contBounds(), cols = b.c1 - b.c0 + 1, cells = [];
+  for (let r = b.r0; r <= b.r1; r++) for (let c = b.c0; c <= b.c1; c++) {
+    const sel = CONT_CELLS.has(r + "," + c), center = (r === 0 && c === 0);
+    cells.push(`<div class="shcell${sel ? " on" : ""}${center ? " ctr" : ""}" onclick="contToggleCell(${r},${c})"></div>`);
+  }
+  return `<div class="shgrid" style="grid-template-columns:repeat(${cols},22px)">${cells.join("")}</div>`;
+}
+function contCellsNbt() {
+  if (!CONT_CELLS.size) return "[[0,0]]";
+  const cells = [...CONT_CELLS].map(k => k.split(",").map(Number));
+  const minR = Math.min(...cells.map(x => x[0])), minC = Math.min(...cells.map(x => x[1]));
+  return "[" + cells.map(([r, c]) => `[${r - minR},${c - minC}]`).join(",") + "]";
+}
+function openContEditor(c) {
+  let ov = document.getElementById("contedit");
+  if (!ov) { ov = document.createElement("div"); ov.id = "contedit"; ov.className = "contedit"; document.body.appendChild(ov); }
+  ov.style.display = "flex";
+  const isNew = CONTEDIT.isNew;
+  const idRow = isNew
+    ? `<div class="row"><label class="f">id</label><input type="text" id="ce_id" placeholder="e.g. backpack, belt"></div>`
+    : `<div class="row"><label class="f">id</label><input type="text" id="ce_id" value="${CONTEDIT.cid}" disabled></div>`;
+  ov.innerHTML = `<div class="contbox">
+    <h3>${isNew ? "New container" : "Edit container"}</h3>
+    ${idRow}
+    <div class="row"><label class="f">label</label><input type="text" id="ce_label" value="${(c.label || "").replace(/"/g, "&quot;")}"></div>
+    <div class="row"><label class="f">color</label><input type="color" id="ce_color" value="${normHex(c.color)}">
+      <label class="f" style="width:auto">style</label>
+      <select id="ce_style">${["round", "sharp", "pill"].map(s => `<option${c.style === s ? " selected" : ""}>${s}</option>`).join("")}</select></div>
+    <div class="sub"><h4>grid cells — click to grow/shrink (the green cell is origin 0,0)</h4>
+      <div id="ce_grid">${contGridHTML()}</div></div>
+    <div class="row"><button class="go" onclick="saveContainer()">${isNew ? "Create container" : "Save changes"}</button>
+      ${isNew ? "" : `<span class="addchip" style="border-color:#a44;color:#d88" onclick="deleteContainer()">delete</span>`}
+      <span class="addchip" onclick="closeContEditor()">close</span></div>
+  </div>`;
+}
+function closeContEditor() { const ov = document.getElementById("contedit"); if (ov) ov.style.display = "none"; }
+function saveContainer() {
+  const g = (id) => document.getElementById(id).value;
+  const { player, cid, isNew } = CONTEDIT;
+  const label = g("ce_label").replace(/"/g, ""), color = g("ce_color"), style = g("ce_style"), cells = contCellsNbt();
+  if (isNew) {
+    const id = (g("ce_id") || "").trim().replace(/\s+/g, "_");
+    if (!id) { alert("enter a container id"); return; }
+    cmd.value = `/container new ${player} ${id}{label:"${label}",color:${color},style:${style},cells:${cells}}`;
+  } else {
+    cmd.value = [`/container modify ${player} ${cid} set label "${label}"`,
+      `/container modify ${player} ${cid} set color ${color}`,
+      `/container modify ${player} ${cid} set style ${style}`,
+      `/container modify ${player} ${cid} set cells ${cells}`].join("\n");
+  }
+  closeContEditor(); runCmd();
+}
+function deleteContainer() {
+  if (!confirm(`Delete container '${CONTEDIT.cid}'? Items placed in it spill to the loose bin.`)) return;
+  runInv(`/container delete ${CONTEDIT.player} ${CONTEDIT.cid}`); closeContEditor();
+}
+
+// radar chart as inline SVG (no libraries). max=null -> auto-scale to the largest value.
+function radar(title, labels, values, max, stroke, fill) {
+  if (max == null) max = Math.max(1, ...values);
+  const n = labels.length, cx = 110, cy = 108, R = 64;
+  const pt = (i, r) => { const a = (i / n) * 2 * Math.PI - Math.PI / 2; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  let g = "";
+  for (let ring = 1; ring <= 3; ring++) {
+    const pts = labels.map((_, i) => pt(i, R * ring / 3).map(v => v.toFixed(1)).join(",")).join(" ");
+    g += `<polygon points="${pts}" fill="none" stroke="#00000022"/>`;
+  }
+  labels.forEach((lab, i) => {
+    const [x, y] = pt(i, R), [lxx, lyy] = pt(i, R + 14);
+    g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#00000022"/>`;
+    g += `<text x="${lxx.toFixed(1)}" y="${lyy.toFixed(1)}" font-size="8" fill="#333" text-anchor="middle">${lab}</text>`;
+  });
+  const poly = values.map((v, i) => pt(i, R * Math.max(0, Math.min(1, v / max))).map(c => c.toFixed(1)).join(",")).join(" ");
+  g += `<polygon points="${poly}" fill="${fill}33" stroke="${stroke}" stroke-width="2"/>`;
+  return `<div class="radar" style="background:${stroke}22"><div class="t">${title}</div>
+    <svg viewBox="0 0 220 200" width="100%">${g}</svg></div>`;
+}
+
+// ---- ITEM EDITOR (attachment 4) ----------------------------------------------
+// LIVE backend: equippable[], wield, on_use(+proc+consume), on_equip(+proc), on_unequip(+proc),
+// and flat-stat deltas (folded into on_equip/on_unequip as stat.x(±n)).
+// NOT yet built (orange .todo): when_equipped (continuous), item attack bludgeon/pierce/slash.
+const FLAT_STATS = {
+  "Defense (flat)": [["defense","defense"], ["armor_class","armor class"]],
+  "Physical Resistance": [["bludgeon_resistance","bludgeon"], ["pierce_resistance","pierce"], ["slash_resistance","slash"]],
+  "Magical Ward": [["arcana_ward","arcana"], ["aether_ward","aether"], ["ethereal_ward","ethereal"], ["ichor_ward","ichor"]],
+  "Affinity": [["bludgeon_affinity","bludgeon"], ["pierce_affinity","pierce"], ["slash_affinity","slash"],
+    ["arcana_affinity","arcana"], ["aether_affinity","aether"], ["ethereal_affinity","ethereal"], ["ichor_affinity","ichor"]],
+};
+function allUUIDs() { return (JSON.stringify(STATE).match(/[a-z]{2}-[A-Za-z0-9]{4}/g)) || []; }
+function nbtVal(repr, key) {   // quoted value first (may contain spaces/commas), else a bare token
+  const m = repr.match(new RegExp(key + ':"((?:[^"\\\\]|\\\\.)*)"')) || repr.match(new RegExp(key + ":([^,\"}\\]]*)"));
+  return m ? m[1] : "";
+}
+function nbtList(repr, key) {   // pull a [a,b,c] nbt list -> ["a","b","c"]
+  const m = repr.match(new RegExp(key + ":\\[([^\\]]*)\\]"));
+  return m ? m[1].split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean) : [];
+}
+function nbtDict(repr, key) {   // pull a {a:1,b:2} nbt sub-dict -> {a:"1", b:"2"}
+  const m = repr.match(new RegExp(key + ":\\{([^}]*)\\}"));
+  const out = {};
+  if (m) m[1].split(",").forEach(p => { const i = p.indexOf(":"); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1).trim(); });
+  return out;
+}
+
+// ---- item GRANTS builder (talents/abilities/effects/quests/flags while held or worn) ----------
+// Client-side list; serialized to the item's `grants` (equipped) / `while_held` nbt on save.
+let IGRANTS = [], IGRANTS_FOR = null;
+const GRANT_KINDS = ["talent", "ability", "effect", "quest", "flag"];
+function _bracketInner(repr, key) {   // inner text of key:[ ... ], bracket/brace-balanced ("" if absent)
+  const at = repr.search(new RegExp("(^|[,{])" + key + ":\\["));
+  if (at < 0) return "";
+  let i = repr.indexOf(key + ":[", at) + key.length + 2, depth = 1, out = "";
+  for (; i < repr.length && depth > 0; i++) {
+    const c = repr[i];
+    if (c === "[") depth++; else if (c === "]") { if (--depth === 0) break; }
+    out += c;
+  }
+  return out;
+}
+function _splitTop(s) {   // split on top-level commas (ignore commas inside [] or {})
+  const parts = []; let depth = 0, cur = "";
+  for (const c of s) {
+    if (c === "[" || c === "{") depth++; else if (c === "]" || c === "}") depth--;
+    if (c === "," && depth === 0) { parts.push(cur); cur = ""; } else cur += c;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts.map(x => x.trim()).filter(Boolean);
+}
+function ensureIGrants(repr) {
+  const key = NAV.cur.player + "/" + (NAV.cur.item == null ? "new" : NAV.cur.item);
+  if (IGRANTS_FOR === key) return;
+  IGRANTS = [];
+  const load = (field, trigger) => _splitTop(_bracketInner(repr || "", field)).forEach(ch => {
+    let kind = ch.slice(0, ch.indexOf(":")).trim().toLowerCase(), spec;
+    if (GRANT_KINDS.includes(kind)) spec = ch.slice(ch.indexOf(":") + 1).trim();
+    else { kind = "talent"; spec = ch.trim(); }       // bare 'fireproof' -> talent
+    IGRANTS.push({trigger, kind, spec});
+  });
+  load("grants", "equipped"); load("while_held", "held");
+  IGRANTS_FOR = key;
+}
+function igrantRowHTML(g, i) {
+  const sel = (cur, opts) => opts.map(o => `<option value="${o[0] || o}"${cur === (o[0] || o) ? " selected" : ""}>${o[1] || o}</option>`).join("");
+  return `<div class="qbrow">
+    <select class="igtrig" title="when it applies" onchange="igrantEdit(${i},'trigger',this.value)">${sel(g.trigger, [["equipped", "while equipped"], ["held", "while held"]])}</select>
+    <select class="igkind" title="element type" onchange="igrantEdit(${i},'kind',this.value)">${sel(g.kind, GRANT_KINDS)}</select>
+    <input class="igspec" value="${escAttr(g.spec)}" placeholder="${g.kind === "flag" ? "flag, e.g. blessed:true" : "name, e.g. fireproof  ·  zap{cooldown:2}"}" oninput="igrantEdit(${i},'spec',this.value)">
+    <button class="qbdel" title="remove" onclick="igrantDel(${i})">✕</button></div>`;
+}
+function renderIGrants() { const b = document.getElementById("ie_grants"); if (b) b.innerHTML = IGRANTS.map(igrantRowHTML).join(""); }
+function igrantEdit(i, f, v) { if (!IGRANTS[i]) return; IGRANTS[i][f] = v; if (f === "kind") renderIGrants(); }
+function igrantAdd() { IGRANTS.push({trigger: "equipped", kind: "talent", spec: ""}); renderIGrants(); }
+function igrantDel(i) { IGRANTS.splice(i, 1); renderIGrants(); }
+function igrantsHTML() {
+  return `<div class="sub"><h4>grants — elements while held / worn (live)</h4>
+    <div class="hint">give the holder a talent / ability / effect / quest, or hold a flag ON — only while this item is in their inventory (held) or in a slot (equipped). Auto-revoked when lost/unequipped.</div>
+    <div id="ie_grants">${IGRANTS.map(igrantRowHTML).join("")}</div>
+    <span class="addchip" onclick="igrantAdd()">＋ grant</span></div>`;
+}
+// ---- item SHAPE editor (grid footprint) -------------------------------------
+// IE_SHAPE = a Set of "r,c" cells (relative; origin 0,0 is the center). Empty = the item takes
+// NO grid space (lives in the loose bin). The grid always shows a 1-cell pad around the selection
+// so you can expand in any direction; on save the cells are normalized so min r = min c = 0.
+let IE_SHAPE = new Set();
+function parseCells(inner) {   // "[0, 0],[1, 0]" -> [[0,0],[1,0]]
+  const out = []; const re = /\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]/g; let m;
+  while ((m = re.exec(inner))) out.push([parseInt(m[1]), parseInt(m[2])]);
+  return out;
+}
+function ensureIeShape(repr) {
+  IE_SHAPE = new Set();
+  const cells = parseCells(_bracketInner(repr, "shape"));
+  if (cells.length) cells.forEach(([r, c]) => IE_SHAPE.add(r + "," + c));
+  else if (!repr) IE_SHAPE.add("0,0");   // new item starts as a single center cell; editing an existing
+}                                          // shape-less item stays empty (no footprint)
+function ieToggleCell(r, c) {
+  const k = r + "," + c;
+  if (IE_SHAPE.has(k)) IE_SHAPE.delete(k); else IE_SHAPE.add(k);
+  renderIeShape();
+}
+function ieShapeBounds() {
+  const rs = [0], cs = [0];
+  IE_SHAPE.forEach(k => { const [r, c] = k.split(",").map(Number); rs.push(r); cs.push(c); });
+  return {r0: Math.min(...rs) - 1, r1: Math.max(...rs) + 1, c0: Math.min(...cs) - 1, c1: Math.max(...cs) + 1};
+}
+function ieShapeHTML() {
+  const b = ieShapeBounds(), cols = b.c1 - b.c0 + 1, cells = [];
+  for (let r = b.r0; r <= b.r1; r++) for (let c = b.c0; c <= b.c1; c++) {
+    const sel = IE_SHAPE.has(r + "," + c), center = (r === 0 && c === 0);
+    cells.push(`<div class="shcell${sel ? " on" : ""}${center ? " ctr" : ""}" onclick="ieToggleCell(${r},${c})"></div>`);
+  }
+  return `<div class="shgrid" style="grid-template-columns:repeat(${cols},22px)">${cells.join("")}</div>`;
+}
+function ieShapeBoxInner() {
+  const n = IE_SHAPE.size;
+  return ieShapeHTML() + `<div class="hint" style="margin-top:6px">${
+    n ? `footprint: ${n} cell${n > 1 ? "s" : ""}` : "no footprint — this item lives in the loose bin (takes no grid space)"}</div>`;
+}
+function renderIeShape() {
+  const box = document.getElementById("ie_shapebox");
+  if (box) box.innerHTML = ieShapeBoxInner();
+}
+function ieShapeNbt() {   // normalized [[r,c],...] with min r = min c = 0; "" if empty
+  if (!IE_SHAPE.size) return "[]";
+  const cells = [...IE_SHAPE].map(k => k.split(",").map(Number));
+  const minR = Math.min(...cells.map(x => x[0])), minC = Math.min(...cells.map(x => x[1]));
+  return "[" + cells.map(([r, c]) => `[${r - minR},${c - minC}]`).join(",") + "]";
+}
+function renderItemEditor() {
+  const p = STATE.players[NAV.cur.player], player = NAV.cur.player;
+  const idx = NAV.cur.item;
+  const repr = (idx != null && p.items[idx]) || "";   // editing an existing item if idx != null
+  const editing = idx != null && repr;
+  const type = repr ? typeOf(repr) : "";
+  const uuid = repr ? nbtVal(repr, "uuid") : "";
+  // prefill the simple fields when editing (reaction/fn list fields are left blank — a blank field is
+  // NOT sent, and `set {nbt}` MERGES, so untouched fields are preserved).
+  const pre = (k) => { const v = repr ? nbtVal(repr, k) : ""; return v === "None" ? "" : v; };  // unset fields read None
+  const eqSet = new Set(nbtList(repr, "equippable"));
+  const gearStats = nbtDict(repr, "stats");   // existing per-item stat bonuses, to prefill the boxes
+  ensureIGrants(repr);                         // load this item's grants/while_held into the builder
+  ensureElHooks({hooks: nbtList(repr, "hooks")});   // and its action hooks (on:equip/use/…)
+  ensureIeShape(repr);                         // load this item's grid footprint into the shape editor
+  const slotOpts = Object.keys((p.nbt && p.nbt.equip_slots) || {}).filter(s => !s.includes("hand"));
+  const chip = (s) => `<span class="chip cat-${slotCat(s)}${eqSet.has(s) ? " on" : ""}" data-slot="${s}"
+       onclick="this.classList.toggle('on')"><span class="box"></span>${s}</span>`;
+  const slotChips = slotOpts.length ? slotOpts.map(chip).join("")
+    : `<span class="muted">this character has no equip_slots defined</span>`;
+  const fnHint = `can use functions e.g. <b>ability:polymorph</b> and deltas e.g. <b>stat.health(1)</b>`;
+  // proc + fn pair for a hook (procVal prefilled from nbt; fn list left blank on edit, see note above)
+  const hook = (id, procPH, fnPH, procVal) => `
+      <div class="row"><label class="f">proc</label><input type="text" id="ie_${id}_proc" placeholder="${procPH}" value="${procVal || ""}"></div>
+      <div class="row"><label class="f">fn</label><input type="text" id="ie_${id}_fn" placeholder="${fnPH}"></div>`;
+  const flatGroup = (title, rows) => `<div class="sub" style="margin:6px 0 0"><h4>${title}</h4><div class="statgrid">`
+    + rows.map(([k, lab]) => `<div class="sg"><label>${lab}</label><input type="text" data-stat="${k}" value="${gearStats[k] || ""}"></div>`).join("")
+    + `</div></div>`;
+
+  const uuidField = uuid
+    ? `<input type="text" id="ie_uuid" value="${uuid}" oninput="checkUUID('${uuid}')"><span id="ie_uuidwarn" class="warn"></span>`
+    : `<input type="text" value="(assigned on create)" disabled>`;
+
+  return `<div class="page"><div class="editor" style="max-width:920px">
+    <div class="ietop">
+      <div class="ieleft">
+        <div class="row"><label class="f">item</label><input type="text" id="ie_type" value="${type}" placeholder="type_id e.g. iron_sword">
+          <label class="f" style="width:auto">uuid</label>${uuidField}</div>
+        <div class="row"><label class="f">name</label><input type="text" id="ie_name" placeholder="name" value="${pre('name')}">
+          <label class="f" style="width:auto">icon</label><input type="text" id="ie_emoji" placeholder="🗡️" value="${pre('emoji')}" style="width:60px">
+          <label class="f" style="width:auto">qty</label><input type="text" id="ie_qty" value="1" style="width:60px"></div>
+        <div class="row"><label class="f">description</label><textarea id="ie_desc" placeholder="item description">${pre('description')}</textarea></div>
+        <div class="row"><label class="f">origin</label><input type="text" id="ie_origin" placeholder="where/when found — DM note" value="${pre('origin')}"></div>
+      </div>
+      <div class="ieright"><div class="sub" style="margin:0"><h4>shape (live: <code>shape[]</code> — grid footprint)</h4>
+        <div class="hint">click cells to grow/shrink; the green center is the anchor. Empty = no grid space (loose bin). Rotate with <b>R</b> while dragging in the inventory.</div>
+        <div id="ie_shapebox">${ieShapeBoxInner()}</div></div></div>
+    </div>
+
+    <div class="sub"><h4>on use (live: <code>/item use</code>)</h4>
+      <div class="chips"><span class="chip${pre('consume') ? ' on' : ''}" id="ie_consume_chip" onclick="this.classList.toggle('on')"><span class="box"></span>
+        destroy qty ×</span> <input type="text" id="ie_consume" value="${pre('consume') || 1}" style="width:54px"> on use</div>
+      ${hook("onuse", "default: item_consumed (comma/space sep)", fnHint.replace(/<\/?b>/g, ""), pre('on_use_proc'))}
+      <div class="hint">${fnHint}</div>
+    </div>
+
+    <div class="sub"><h4>equip slots (live: <code>equippable[]</code>)</h4>
+      <div class="chips">${slotChips}</div>
+      <div class="sub" style="margin:8px 0 0"><h4>on_equip (live)</h4>${hook("onequip", "item_equipped", fnHint.replace(/<\/?b>/g, ""), pre('on_equip_proc'))}</div>
+      <div class="sub" style="margin:6px 0 0"><h4>when_equipped (live: <code>/proc enable</code> ↔ <code>disable</code>)</h4>
+        <div class="row"><label class="f">proc</label><input type="text" id="ie_whenequipped" placeholder="signals kept ON while worn, e.g. has_helmet" value="${pre('when_equipped')}"></div>
+        <div class="hint">enabled (sticky) on equip, disabled on unequip — continuous while worn.</div></div>
+      <div class="sub" style="margin:6px 0 0"><h4>on_unequip (live)</h4>${hook("onunequip", "item_unequipped", fnHint.replace(/<\/?b>/g, ""), pre('on_unequip_proc'))}</div>
+    </div>
+
+    ${igrantsHTML()}
+
+    <div class="sub"><h4>🪝 hooks <span class="muted" style="font-weight:400">— ACTIONS on item events (equip / unequip / use)</span></h4>
+      <div id="el_hooksbox">${elHooksInner("item")}</div></div>
+
+    <div class="sub"><h4>gear stats (live while worn)</h4>
+      <div class="hint">stored as the item's <code>stats</code> block — folded into your stats live by <code>recompute</code> while equipped, removed on unequip.
+        Note: bonuses land on BASE stats; a stat that's formula-derived (some resistances/wards) only moves if you boost a base input it reads.</div>
+      ${Object.entries(FLAT_STATS).map(([t, rows]) => flatGroup(t, rows)).join("")}
+    </div>
+
+    <div class="sub"><h4>weapon (live: <code>wield</code>)</h4>
+      <div class="row"><label class="f">wield</label>
+        <select id="ie_wield">${["", "main", "off", "both"].map(o =>
+          `<option value="${o}"${pre('wield') === o ? " selected" : ""}>${o || "— not a weapon —"}</option>`).join("")}</select></div>
+      <div class="sub todo" style="margin:6px 0 0"><h4>attack — NOT BUILT</h4>
+        <div class="statgrid">
+          <div class="sg"><label>bludgeon</label><input type="text" disabled></div>
+          <div class="sg"><label>pierce</label><input type="text" disabled></div>
+          <div class="sg"><label>slash</label><input type="text" disabled></div></div></div>
+    </div>
+
+    <div class="row"><label class="f">nbt</label><input type="text" id="ie_custom" placeholder="key:value, key2:value2 — any extra fields"></div>
+
+    <div class="row"><button class="go" onclick="saveItem()">${editing ? "Save changes" : "Create"} → stage command</button>
+      <span class="hint">stages <code>${editing ? "/item modify … set" : "/item new"}</code> in the console — review, then Enter.</span></div>
+    <div id="ie_preview" class="hint" style="margin-top:6px"></div>
+  </div></div>`;
+}
+function checkUUID(self) {
+  const el = document.getElementById("ie_uuid"), warn = document.getElementById("ie_uuidwarn");
+  const v = el.value.trim();
+  const clash = v && v !== self && allUUIDs().includes(v);
+  warn.textContent = clash ? "⚠ this uuid is already in use" : "";
+}
+function saveItem() {
+  const g = (id) => (document.getElementById(id) || {}).value.trim();
+  const on = (id) => { const e = document.getElementById(id); return e && e.classList.contains("on"); };
+  const slots = [...document.querySelectorAll(".chip.on[data-slot]")].map(c => c.dataset.slot);
+  // gear stats -> the item's `stats` block (recompute folds these in live while worn)
+  const statBonus = {};
+  document.querySelectorAll("[data-stat]").forEach(inp => {
+    const n = parseFloat(inp.value);
+    if (!isNaN(n) && n !== 0) statBonus[inp.dataset.stat] = n;
+  });
+  const bracket = (fn) => fn ? "[" + fn.replace(/^\[|\]$/g, "") + "]" : "";   // wrap a reaction fn in [ ]
+  const idx = NAV.cur.item, editing = idx != null;
+  const q = (s) => '"' + s.replace(/"/g, '\\"') + '"';   // quote free-text so spaces/commas are safe
+  const nbt = {};
+  if (g("ie_name")) nbt.name = q(g("ie_name"));
+  if (g("ie_desc")) nbt.description = q(g("ie_desc"));
+  if (g("ie_origin")) nbt.origin = q(g("ie_origin"));
+  if (g("ie_emoji")) nbt.emoji = q(g("ie_emoji"));
+  // editing always sends equippable + stats (so clearing a chip/box takes effect); creating, only if present.
+  if (editing || slots.length) nbt.equippable = "[" + slots.join(",") + "]";
+  if (editing || Object.keys(statBonus).length)
+    nbt.stats = "{" + Object.entries(statBonus).map(([k, v]) => `${k}:${v}`).join(",") + "}";
+  if (g("ie_wield")) nbt.wield = g("ie_wield");
+  if (on("ie_consume_chip")) nbt.consume = g("ie_consume") || "1";
+  const onuse = bracket(g("ie_onuse_fn")); if (onuse) nbt.on_use = onuse;
+  if (g("ie_onuse_proc")) nbt.on_use_proc = g("ie_onuse_proc");
+  const oneq = bracket(g("ie_onequip_fn")); if (oneq) nbt.on_equip = oneq;
+  if (g("ie_onequip_proc")) nbt.on_equip_proc = g("ie_onequip_proc");
+  if (g("ie_whenequipped")) nbt.when_equipped = g("ie_whenequipped");
+  const onun = bracket(g("ie_onunequip_fn")); if (onun) nbt.on_unequip = onun;
+  if (g("ie_onunequip_proc")) nbt.on_unequip_proc = g("ie_onunequip_proc");
+  // grants: split the builder rows by trigger into the item's grants[] (equipped) / while_held[] nbt.
+  const gspec = (x) => `${x.kind}:${x.spec.trim()}`;
+  const eqG = IGRANTS.filter(x => x.trigger === "equipped" && x.spec.trim()).map(gspec);
+  const heldG = IGRANTS.filter(x => x.trigger === "held" && x.spec.trim()).map(gspec);
+  if (editing || eqG.length) nbt.grants = "[" + eqG.join(", ") + "]";        // editing always sends (so clearing rows takes effect)
+  if (editing || heldG.length) nbt.while_held = "[" + heldG.join(", ") + "]";
+  if (editing || ELHOOKS.length) nbt.hooks = "[" + ELHOOKS.join(",") + "]";   // attached action hooks (on:equip/use/…)
+  nbt.shape = ieShapeNbt();   // grid footprint (always sent: [] clears it -> loose bin)
+  let body = Object.entries(nbt).map(([k, v]) => `${k}:${v}`).join(",");
+  const custom = g("ie_custom");                  // free-form extra nbt (items aren't limited to the fields above)
+  if (custom) body = body ? body + "," + custom : custom;
+  // editing -> MERGE-modify the existing item by inventory index (no duplicate); creating -> new.
+  const preview = document.getElementById("ie_preview");
+  let line;
+  if (editing) {
+    if (!body) { preview.textContent = "no changes to save."; return; }
+    line = `/item modify ${NAV.cur.player} [${idx}] set {${body}}`;
+  } else {
+    line = `/item new ${NAV.cur.player} ${g("ie_type") || "item"}{${body}} ${g("ie_qty") || "1"}`;
+  }
+  cmd.value = line; cmd.focus();
+  preview.innerHTML = "staged: <b>" + line.replace(/</g, "&lt;") + "</b>";
+}
+
+// ==== COMMAND BAR — autofill + run + history (unchanged core) =================
+const cmd = document.getElementById("cmd"), ac = document.getElementById("ac");
+let acItems = [], acSel = -1, HIST = [], histIdx = 0;
+function splitTok(s) { return s.split(/([ {,>\n])/); }   // \n is a delimiter so tokens never span lines
+function lastTok(s) { const p = splitTok(s); return p[p.length - 1]; }
+function setLastTok(v) { const p = splitTok(cmd.value); p[p.length - 1] = v; cmd.value = p.join(""); }
+function commonPrefix(a) { let p = a[0] || ""; for (const s of a) while (!s.startsWith(p)) p = p.slice(0, -1); return p; }
+function acOpen() { return ac.style.display === "block"; }
+function hideAC() { ac.style.display = "none"; acItems = []; acSel = -1; }
+async function showAC() {
+  const line = cmd.value.split("\n").pop();          // complete the current (last) line only
+  if (!line.trim()) return hideAC();
+  acItems = await (await fetch("/complete?line=" + encodeURIComponent(line))).json();
+  if (!acItems.length) return hideAC();
+  acSel = -1;
+  ac.innerHTML = acItems.map((c, i) => `<div onmousedown="event.preventDefault();acceptAC(${i})">${c}</div>`).join("");
+  ac.style.display = "block";
+}
+function moveSel(d) {
+  acSel = (acSel + d + acItems.length) % acItems.length;
+  [...ac.children].forEach((el, i) => el.className = i === acSel ? "sel" : "");
+}
+function acceptAC(i) { if (acItems[i] == null) return; setLastTok(acItems[i] + " "); hideAC(); cmd.focus(); showAC(); }
+function tabComplete() {
+  if (!acItems.length) return;
+  if (acSel >= 0) return acceptAC(acSel);
+  if (acItems.length === 1) return acceptAC(0);
+  const lcp = commonPrefix(acItems);
+  if (lcp.length > lastTok(cmd.value).length) { setLastTok(lcp); showAC(); return; }
+  moveSel(1);
+}
+function recall(d) { if (!HIST.length) return; histIdx = Math.max(0, Math.min(HIST.length, histIdx + d)); cmd.value = HIST[histIdx] || ""; }
+function send(line) { cmd.value = line; runCmd(); }
+// Fullscreen console toggle (button next to "console", ⌘/ to toggle, Esc to exit).
+function toggleConsoleFull(force) {
+  const on = force === undefined ? !document.body.classList.contains("confull") : force;
+  document.body.classList.toggle("confull", on);
+  if (on) cmd.focus();
+  const log = document.getElementById("log"); log.scrollTop = log.scrollHeight;
+}
+async function runOne(line) {                          // run a single command line, append its output
+  const r = await (await fetch("/cmd", {method: "POST", headers: {"Content-Type": "application/json"},
+                                        body: JSON.stringify({line})})).json();
+  const log = document.getElementById("log");
+  log.textContent += "ttrpg> " + line + "\n" + (r.output ? r.output + "\n" : "");
+  log.scrollTop = log.scrollHeight;
+  STATE = r.state;
+}
+async function runCmd() {                              // run EVERY non-empty line, in order, as one batch
+  const lines = cmd.value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return;
+  HIST.push(cmd.value); histIdx = HIST.length;
+  cmd.value = ""; hideAC();
+  for (const line of lines) await runOne(line);
+  render();
+}
+cmd.addEventListener("input", showAC);
+cmd.addEventListener("keydown", (e) => {
+  if (e.key === "Tab") { e.preventDefault(); tabComplete(); }
+  else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runCmd(); }  // Shift+Enter = newline (default)
+  else if (e.key === "Escape") { hideAC(); if (document.body.classList.contains("confull")) toggleConsoleFull(false); else cmd.blur(); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); acOpen() ? moveSel(1) : recall(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); acOpen() ? moveSel(-1) : recall(-1); }
+});
+document.addEventListener("click", (e) => { if (!ac.contains(e.target) && e.target !== cmd) hideAC(); });
+
+// ==== GLOBAL KEYBOARD NAV =====================================================
+// Active only when you're NOT typing in the console (or any input/textarea/select).
+document.addEventListener("keydown", (e) => {
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+  if (labOpen() && e.key === "Escape" && !typing) { e.preventDefault(); closeLab(); return; }   // Esc exits the lab
+  if (helpOpen() && !typing) {   // overlay up: Esc/? close it; swallow other nav so nothing happens behind it
+    if (e.key === "Escape" || e.key === "?") { e.preventDefault(); closeHelp(); }
+    return;
+  }
+  if (e.key === "`") { e.preventDefault(); home(); return; }   // ` ALWAYS returns to the menu
+  if ((e.metaKey || e.ctrlKey) && e.key === "/") { e.preventDefault(); toggleConsoleFull(); return; }  // ⌘/ toggles fullscreen console
+  if (typing) return;                                          // otherwise let the field have the key
+  if (e.key === "Escape") { e.preventDefault(); back(); return; }
+  if ((e.key === "+" || e.key === "=") && ADD_ACTION) { e.preventDefault(); ADD_ACTION(); return; }  // +/= fire the screen's "+"
+  if (e.key === "?") { e.preventDefault(); openHelp(); return; }                // '?' -> formatting reference (overlay)
+  if (e.key === "/") { e.preventDefault(); cmd.focus(); if (!cmd.value) cmd.value = "/"; showAC(); return; }  // '/' -> console
+  const fn = KEYMAP[e.key.toLowerCase()];
+  if (fn) { e.preventDefault(); fn(); }
+});
+
+refresh();
+</script>
+</body></html>

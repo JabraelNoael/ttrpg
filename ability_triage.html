@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ability Triage — TTRPG engine scope</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#15181d; --line:#262b33; --ink:#e8eaed; --muted:#9aa3b2; --dim:#6b7280;
+    --gold:#d9a441; --blue:#8ab4f8; --green:#81c784; --amber:#d9a441; --red:#e88;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px;}
+  h1{font-size:26px;margin:0 0 4px;}
+  .sub{color:var(--muted);margin:0 0 22px;}
+  .counts{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 26px;}
+  .chip{border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-weight:600;font-size:14px;}
+  .chip.full{color:var(--green);border-color:#2e7d3266;background:#0d200e}
+  .chip.part{color:var(--amber);border-color:#b5803f66;background:#28200e}
+  .chip.no{color:var(--red);border-color:#c0392b66;background:#2a1212}
+  h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);
+     margin:30px 0 12px;border-bottom:1px solid var(--line);padding-bottom:6px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:0 0 16px;}
+  .blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;}
+  .block{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+  .block b{color:var(--ink)} .block span{color:var(--muted);font-size:13px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:.9em;color:var(--gold);
+     background:#1c2027;border:1px solid var(--line);border-radius:4px;padding:1px 5px;}
+  ul{list-style:none;margin:0;padding:0;}
+  li{display:flex;gap:10px;padding:9px 0;border-bottom:1px dotted #20242b;align-items:baseline;}
+  li:last-child{border-bottom:0}
+  .nm{flex:0 0 210px;font-weight:600;}
+  .full .nm{color:var(--green)} .part .nm{color:var(--amber)} .no .nm{color:var(--red)}
+  .ds{color:var(--muted);font-size:14px;flex:1;min-width:0;}
+  .tier-head{display:flex;align-items:center;gap:10px;}
+  .tier-head .n{color:var(--dim);font-weight:400;font-size:14px;}
+  .built{color:var(--green);font-size:12px;border:1px solid #2e7d3266;border-radius:4px;padding:0 5px;margin-left:6px;}
+  .note{color:var(--dim);font-size:13px;margin-top:4px;}
+  .scrollx{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ability Triage</h1>
+  <p class="sub">40 drafted abilities mapped against what the engine can actually enforce. Items marked
+    <span class="built">on demo</span> are built and live at <code>localhost:1024</code> → player <b>demo</b>.</p>
+  <div class="counts">
+    <span class="chip full">✅ 2 fully supported</span>
+    <span class="chip part">🟡 24 partially supported</span>
+    <span class="chip no">⛔ 14 DM-managed</span>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;border:0;padding:0">The 8 building blocks everything reduces to</h2>
+    <div class="blocks">
+      <div class="block"><b>Stat</b> — <span>any number: health, mana, luck… or invented ones (fear, footnote, debt, campfire_heat). Supports <code>base×mult+flat</code> + derived formulas.</span></div>
+      <div class="block"><b>Cost</b> — <span>an ability spends stats/items on cast; blocks the cast if you can't pay.</span></div>
+      <div class="block"><b>Reaction</b> — <span>applies stat deltas <i>and/or</i> calls functions on a target (<code>@s</code>).</span></div>
+      <div class="block"><b>Cooldown</b> — <span>turns before an ability can be recast.</span></div>
+      <div class="block"><b>Effect</b> — <span>a timed buff/debuff that ticks over N turns; can fire procs/reactions on chosen turns.</span></div>
+      <div class="block"><b>Talent</b> — <span>a passive that fires when proc-flags match (AND within a clause, OR across clauses).</span></div>
+      <div class="block"><b>Flag</b> — <span>a named on/off signal; <code>pulse</code> (momentary) or <code>enable/disable</code> (sticky). The DM's switch for "is this true right now?"</span></div>
+      <div class="block"><b>Function</b> — <span>a saved sequence of any commands, run with <code>@s</code> bound. The escape hatch for multi-step or whole-group effects.</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;border:0;padding:0">How to translate any new ability</h2>
+    <ul>
+      <li><span class="nm" style="color:var(--ink)">Quantify it</span><span class="ds">Any number an ability cares about → a <b>stat</b>, even abstract ones (fear, trust, debt, footnote stacks, accumulated heat).</span></li>
+      <li><span class="nm" style="color:var(--ink)">"Pay X to cast"</span><span class="ds">→ a <b>Cost</b> on the ability.</span></li>
+      <li><span class="nm" style="color:var(--ink)">"Gain / lose / buff Y"</span><span class="ds">→ a <b>Reaction</b> (instant) or an <b>Effect</b> (over time).</span></li>
+      <li><span class="nm" style="color:var(--ink)">"Whenever Z happens"</span><span class="ds">→ a <b>Talent</b> keyed to a <b>flag</b> you pulse when Z happens (death/turn already auto-pulse).</span></li>
+      <li><span class="nm" style="color:var(--ink)">"Do several things / to a group"</span><span class="ds">→ a <b>Function</b>.</span></li>
+      <li><span class="nm" style="color:var(--ink)">"Is this condition on now?"</span><span class="ds">(in combat, being watched, plot tension high) → a <b>flag</b> the DM toggles.</span></li>
+      <li><span class="nm" style="color:var(--ink)">Perception / narrative / ownership / AI / valuation / memory</span><span class="ds">→ <b>not modeled</b>; lives in the DM's head, optionally mirrored as a flag or a calendar/quest note.</span></li>
+    </ul>
+  </div>
+
+  <h2 class="tier-head">✅ Fully supported <span class="n">— cast it; the engine enforces cost + effect end-to-end</span></h2>
+  <ul class="full">
+    <li><span class="nm">Emotional Alchemy <span class="built">on demo</span></span><span class="ds">Emotions modeled as stats → ability <code>cost: emotion(N)</code>, <code>on_hit: resource(N)</code>. Built fear→speed &amp; regret→mana; same pattern covers joy→health, envy→crit.</span></li>
+    <li><span class="nm">Contract With Future Corpse <span class="built">on demo</span></span><span class="ds">Talent on the <code>died</code> proc runs a function — your corpse executes a scripted "contract." Fully automatic once the function is written.</span></li>
+  </ul>
+
+  <h2 class="tier-head">🟡 Partially supported <span class="n">— real scaffolding (cost / effect / flag / function); DM adjudicates the trigger, target, or outcome</span></h2>
+  <ul class="part">
+    <li><span class="nm">Borrowed Tomorrow <span class="built">on demo</span></span><span class="ds">Mana cost + burst grant are enforced; "halt regen until repaid" is a flag the DM tracks (regen is automatic).</span></li>
+    <li><span class="nm">Bureau of Coincidences <span class="built">on demo</span></span><span class="ds">The <code>luck</code> cost is enforced; the converging events are narrated.</span></li>
+    <li><span class="nm">Infinite Campfire <span class="built">on demo</span></span><span class="ds"><code>campfire_heat</code> accumulator stat (never drops); DM removes the burned item and picks its heat value.</span></li>
+    <li><span class="nm">Predator's Bureaucracy <span class="built">on demo</span></span><span class="ds">Fires on a <code>enemy_killed</code> pulse → runs a function; you decide which effects/quests transfer.</span></li>
+    <li><span class="nm">Living Footnote <span class="built">on demo</span></span><span class="ds"><code>footnote</code> stat tracks stacks (DM pulses on indirect reference); at 100, pulse <code>footnote_full</code> to trigger the rewrite.</span></li>
+    <li><span class="nm">Conservation of Narrative <span class="built">on demo</span></span><span class="ds"><code>died + plot_armor</code> proc leaves you at 1 hp instead of dying; DM toggles <code>plot_armor</code> by tension.</span></li>
+    <li><span class="nm">Apotheosis of the Mundane <span class="built">on demo</span></span><span class="ds">Action-count stat (steps) + a threshold pulse unlocks the supernatural version; DM increments the count.</span></li>
+    <li><span class="nm">Deferred Consequences <span class="built">on demo</span></span><span class="ds">Timed effect; on the last turn it runs a function you appended consequences to during the window.</span></li>
+    <li><span class="nm">Echo Debt <span class="built">on demo</span></span><span class="ds">The "deaf" cost = a timed effect; the mark = a flag/effect on the target. The copy/delay/proximity core is DM-run.</span></li>
+    <li><span class="nm">Feast of Absences</span><span class="ds">Destroy an item + grant a buff is real; valuation (market/rarity/sentiment) and item-specific effects are DM rulings.</span></li>
+    <li><span class="nm">The Last Door</span><span class="ds">Delete a map cell's name + set the player's <code>pos</code> = a portal; "the place you can't remember" is DM fiction.</span></li>
+    <li><span class="nm">Reverse Pickpocket</span><span class="ds">Giving the target an item is real; the "can't drop/remove" lock and attached transfers are DM-enforced.</span></li>
+    <li><span class="nm">Funeral for a Possibility</span><span class="ds">A <code>banned:&lt;action&gt;</code> flag on nearby entities marks the ban; the engine doesn't model jumping/speaking, so enforcement is DM.</span></li>
+    <li><span class="nm">Symbiotic Cast</span><span class="ds">A function splits a cost across a list; trust as a stat that decrements. Who "trusts you" is DM-curated.</span></li>
+    <li><span class="nm">Inheritance Tax</span><span class="ds">On-summon-death proc → function adds lifespan (effect duration) to other summons; "nearby / which" is DM.</span></li>
+    <li><span class="nm">Fractal Curse</span><span class="ds">A function applies scaled-down effects to a list of targets; recursion/re-propagation is DM-driven.</span></li>
+    <li><span class="nm">Ship of Theseus</span><span class="ds">Model each replacement as an equippable item granting stats (chain-arm, telescope-eye); body-part fiction is flavor.</span></li>
+    <li><span class="nm">Entropy Investment</span><span class="ds">A function grants the "interest" resource; item age/survival is the DM's judgment (no durability model).</span></li>
+    <li><span class="nm">The Second Shadow</span><span class="ds"><code>/summon</code> a creature as the shadow; its autonomy / objective-following is DM-played.</span></li>
+    <li><span class="nm">Observer Effect</span><span class="ds">Two buff-sets gated by a <code>watched</code> flag the DM toggles — there's no real line-of-sight tracking.</span></li>
+    <li><span class="nm">Recursive Summoning</span><span class="ds"><code>/summon</code> + give the summon a weaker copy of the ability; each recursion level is set up by the DM.</span></li>
+    <li><span class="nm">Debt Collector</span><span class="ds">Model the debt as a stat/quest on the enemy; detecting "they avoided a cost" is the DM's call.</span></li>
+    <li><span class="nm">The Museum of Almost</span><span class="ds">Archive failures as items/quests; "completing" one later fires its reward. What counts as a failure is DM.</span></li>
+    <li><span class="nm">Census Taker</span><span class="ds">The engine knows entities in range; numbering + targeting primes/even/Fibonacci is computed by a function/DM, then applied via list selectors.</span></li>
+  </ul>
+
+  <h2 class="tier-head">⛔ DM-managed <span class="n">— depends on systems the engine doesn't have; a description card is the most it can hold</span></h2>
+  <ul class="no">
+    <li><span class="nm">Paradox Engine <span class="built">on demo</span></span><span class="ds">Energy ∝ "how impossible" — unquantifiable; DM sets any gain by hand.</span></li>
+    <li><span class="nm">Statistical Outlier <span class="built">on demo</span></span><span class="ds">No hook into arbitrary event probabilities.</span></li>
+    <li><span class="nm">Shared Fate Lottery</span><span class="ds">No event interception/redirection — can't auto-reroute "all damage/healing/movement/inventory."</span></li>
+    <li><span class="nm">Jury of the Forgotten</span><span class="ds">No death-log with positions/time, no relationship history, no voting model.</span></li>
+    <li><span class="nm">Gravity Audit</span><span class="ds">No object mass or physics.</span></li>
+    <li><span class="nm">Hunger Market</span><span class="ds">No needs/bartering system between entities.</span></li>
+    <li><span class="nm">Stolen Context</span><span class="ds">No memory model; "memory as an inspectable object" doesn't exist.</span></li>
+    <li><span class="nm">Ownership Dispute</span><span class="ds">No ownership graph over buffs / titles / memories to contest.</span></li>
+    <li><span class="nm">Divine Technicality</span><span class="ds">No rules-introspection-and-exploit engine.</span></li>
+    <li><span class="nm">Ecological Succession</span><span class="ds">No terrain/ecology evolution (a death-proc could nudge a map biome, but the staged succession is DM).</span></li>
+    <li><span class="nm">Multithreaded Existence</span><span class="ds">No clones sharing one inventory with contradiction-reconciliation.</span></li>
+    <li><span class="nm">The King's Missing Piece</span><span class="ds">No model of "systems treating a removed component as critical."</span></li>
+    <li><span class="nm">Negative Space Elemental</span><span class="ds">No environment-absence detection; only a DM-statted <code>/summon</code>.</span></li>
+    <li><span class="nm">Selective Evolution</span><span class="ds">Abilities don't track their own failures or self-mutate.</span></li>
+  </ul>
+
+  <div class="card">
+    <h2 style="margin-top:0;border:0;padding:0">The ceiling — what no amount of modeling fixes</h2>
+    <p class="ds">These are the recurring walls behind every ⛔: <b>no line-of-sight / "who is watching"</b>, <b>no parsing of speech or indirect references</b>, <b>no narrative/anticlimax awareness</b>, <b>no event interception/redirection</b>, <b>no ability-copying or self-modifying abilities</b>, <b>no autonomous entities pursuing objectives</b>, and <b>no physics, ownership graph, memory objects, or market valuation</b>. Also: time is in <b>turns, not seconds</b> — map "60 seconds" → turns when building.</p>
+    <p class="note">Most of these abilities were drafted without the engine in view, so landing 2 fully-automatic and 24 partially-scaffolded out of 40 is a good outcome — the partials still let the engine carry the bookkeeping (the cost, the buff, the timer) while you keep the judgment calls.</p>
+  </div>
+</div>
+</body>
+</html>

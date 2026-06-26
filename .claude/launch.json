@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "ttrpg-ui", "runtimeExecutable": "python3", "runtimeArgs": ["ui.py"], "port": 1024 }
+  ]
+}
